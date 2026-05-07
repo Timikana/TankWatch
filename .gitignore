@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+.claude.local/
+CLAUDE.md
+
+# WoW addon build / packager
+.release/
+.pkgmeta.local
+*.zip
+*.tar.gz
+
+# WoW SavedVariables
+WTF/
+*.lua.bak
+
+# Logs
+*.log

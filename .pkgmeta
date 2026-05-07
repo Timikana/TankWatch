@@ -1,0 +1,9 @@
+package-as: TankWatch
+
+ignore:
+  - .gitignore
+  - .github
+  - README.md
+  - LICENSE
+  - CLAUDE.md
+  - .pkgmeta

@@ -1,0 +1,27 @@
+## Interface: 120000, 120001, 120005
+## Title: TankWatch
+## Notes: Highlight tanks with their boss-cast debuffs and stack counts.
+## Author: Timikana
+## Version: 0.1.0
+## IconTexture: Interface\Icons\Spell_Holy_GreaterBlessingofKings
+## SavedVariables: TankWatchDB
+## AllowAddOnTableAccess: 1
+
+# Libs
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.xml
+
+# Core
+TankWatch.lua
+
+# Locales
+Locales\enUS.lua
+Locales\frFR.lua
+
+# Frames
+Frames\Tank.lua
+Frames\Auras.lua
+
+# Options panel
+Options\Panel.lua
