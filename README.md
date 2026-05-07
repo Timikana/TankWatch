@@ -1,5 +1,7 @@
 <div align="center">
 
+  <img src="logo.png" alt="TankWatch" width="180" />
+
   # TankWatch
 
   **See every tank in your group, with the boss debuffs that actually matter.**

@@ -2,7 +2,7 @@
 ## Title: TankWatch
 ## Notes: Highlight tanks with their boss-cast debuffs and stack counts.
 ## Author: Timikana
-## Version: 0.1.0
+## Version: 0.2.1
 ## IconTexture: Interface\Icons\Spell_Holy_GreaterBlessingofKings
 ## SavedVariables: TankWatchDB
 ## AllowAddOnTableAccess: 1

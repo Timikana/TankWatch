@@ -5,11 +5,39 @@ if GetLocale() ~= "frFR" then return end
 local L = TW.L
 
 -- Tabs
-L["Layout"] = "Disposition"
-L["Bars"]   = "Barres"
-L["Text"]   = "Texte"
-L["Auras"]  = "Auras"
-L["About"]  = "À propos"
+L["Layout"]   = "Disposition"
+L["Bars"]     = "Barres"
+L["Text"]     = "Texte"
+L["Auras"]    = "Auras"
+L["Profiles"] = "Profils"
+L["About"]    = "À propos"
+
+-- Profiles
+L["Active profile"]                              = "Profil actif"
+L["Character:"]                                  = "Personnage :"
+L["New..."]                                      = "Nouveau..."
+L["Reset"]                                       = "Réinitialiser"
+L["Delete"]                                      = "Supprimer"
+L["Name of the new profile (copies current settings):"] = "Nom du nouveau profil (copie les réglages actuels) :"
+L["Name for the imported profile:"]              = "Nom du profil à importer :"
+L["Reset profile '%s' to defaults?"]             = "Réinitialiser le profil '%s' aux valeurs par défaut ?"
+L["Delete profile '%s'?"]                        = "Supprimer le profil '%s' ?"
+L["cannot delete Default"]                       = "impossible de supprimer Default"
+L["profile '%s' created"]                        = "profil '%s' créé"
+L["profile '%s' imported"]                       = "profil '%s' importé"
+L["import failed:"]                              = "échec de l'import :"
+L["import box is empty"]                         = "la zone d'import est vide"
+L["Export"]                                      = "Exporter"
+L["Import"]                                      = "Importer"
+L["Refresh export"]                              = "Rafraîchir l'export"
+L["Select all"]                                  = "Tout sélectionner"
+L["Import as new profile..."]                    = "Importer comme nouveau profil..."
+
+-- Minimap button
+L["Show minimap button"] = "Bouton minimap"
+L["Left-click: options"] = "Clic gauche : options"
+L["Right-click: mover"]  = "Clic droit : mover"
+L["Drag: reposition"]    = "Glisser : repositionner"
 
 -- Window
 L["TankWatch — Options"] = "TankWatch — Options"

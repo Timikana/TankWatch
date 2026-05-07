@@ -372,6 +372,22 @@ local function buildLayoutPage(page)
 
     y = y - 30
     makeCheck(page, L["Enable"], "enabled", 14, y)
+
+    -- Minimap button toggle (lives in global DB, not the active profile)
+    local mmCB = CreateFrame("CheckButton", "TWOpt_minimap", page, "InterfaceOptionsCheckButtonTemplate")
+    mmCB:SetPoint("TOPLEFT", page, "TOPLEFT", 184, y)
+    mmCB.Text:SetText(L["Show minimap button"])
+    mmCB:SetScript("OnShow", function(self)
+        local g = TW:GetGlobalDB()
+        self:SetChecked(not (g.minimap and g.minimap.hide))
+    end)
+    mmCB:SetScript("OnClick", function(self)
+        local g = TW:GetGlobalDB()
+        g.minimap = g.minimap or {}
+        g.minimap.hide = not self:GetChecked()
+        if TW.UpdateMinimapButton then TW:UpdateMinimapButton() end
+    end)
+
     y = y - 26
     makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y)
     makeDropdown(page, L["Grow Direction"], "growDirection", {
@@ -464,6 +480,211 @@ local function buildAurasPage(page)
     makeSlider(page, L["Offset Y"], "aurasY", -200, 200, 1, 260, y)
 end
 
+-- ============================================================
+-- POPUP: name input (used by New / Copy)
+-- ============================================================
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs["TANKWATCH_PROFILE_NAME"] = {
+    text         = "%s",
+    button1      = OKAY or "OK",
+    button2      = CANCEL or "Cancel",
+    hasEditBox   = true,
+    editBoxWidth = 240,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    OnShow       = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
+    OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
+    EditBoxOnEnterPressed = function(self)
+        local parent = self:GetParent()
+        if parent.data and parent.data.onAccept then parent.data.onAccept(self:GetText()) end
+        parent:Hide()
+    end,
+    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+}
+
+StaticPopupDialogs["TANKWATCH_CONFIRM"] = {
+    text         = "%s",
+    button1      = YES or "Yes",
+    button2      = NO  or "No",
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept() end end,
+}
+
+local function askName(prompt, onAccept)
+    local d = StaticPopup_Show("TANKWATCH_PROFILE_NAME", prompt)
+    if d then d.data = { onAccept = onAccept } end
+end
+
+local function askConfirm(prompt, onAccept)
+    local d = StaticPopup_Show("TANKWATCH_CONFIRM", prompt)
+    if d then d.data = { onAccept = onAccept } end
+end
+
+-- ============================================================
+-- PROFILES PAGE
+-- ============================================================
+local function buildProfilesPage(page)
+    local y = -10
+
+    -- Active profile dropdown (custom — refreshes from TW:ListProfiles)
+    local labelFS = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    labelFS:SetPoint("TOPLEFT", 14, y)
+    labelFS:SetText(L["Active profile"])
+
+    local dd = CreateFrame("Frame", "TWOpt_DD_profile", page, "UIDropDownMenuTemplate")
+    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", -18, -2)
+    UIDropDownMenu_SetWidth(dd, 200)
+
+    local function refreshDD()
+        UIDropDownMenu_SetText(dd, TW:GetActiveProfileName())
+    end
+    UIDropDownMenu_Initialize(dd, function()
+        for _, name in ipairs(TW:ListProfiles()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text    = name
+            info.value   = name
+            info.checked = (name == TW:GetActiveProfileName())
+            info.func    = function()
+                TW:SetActiveProfile(name)
+                refreshDD()
+                if panel and panel.refreshAll then panel.refreshAll() end
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    dd.refresh = refreshDD
+    refreshDD()
+
+    -- Char info
+    local charFS = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    charFS:SetPoint("TOPLEFT", 240, y - 20)
+    charFS:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
+
+    y = y - 64
+
+    -- Action buttons
+    local function mkBtn(text, x, yy, w, onClick)
+        local b = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+        b:SetSize(w or 110, 22)
+        b:SetPoint("TOPLEFT", x, yy)
+        b:SetText(text)
+        b:SetScript("OnClick", onClick)
+        return b
+    end
+
+    mkBtn(L["New..."], 14, y, 110, function()
+        askName(L["Name of the new profile (copies current settings):"], function(name)
+            local ok, err = TW:CreateProfile(name, TW:GetActiveProfileName())
+            if ok then
+                TW:SetActiveProfile(name)
+                refreshDD()
+                if panel and panel.refreshAll then panel.refreshAll() end
+                print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' created"], name))
+            else
+                print("|cff00ff96TankWatch:|r " .. tostring(err))
+            end
+        end)
+    end)
+
+    mkBtn(L["Reset"], 134, y, 110, function()
+        askConfirm(format(L["Reset profile '%s' to defaults?"], TW:GetActiveProfileName()), function()
+            TW:ResetCurrentProfile()
+            if panel and panel.refreshAll then panel.refreshAll() end
+            if TW.RefreshAll then TW:RefreshAll() end
+        end)
+    end)
+
+    mkBtn(L["Delete"], 254, y, 110, function()
+        local cur = TW:GetActiveProfileName()
+        if cur == "Default" then
+            print("|cff00ff96TankWatch:|r " .. L["cannot delete Default"]); return
+        end
+        askConfirm(format(L["Delete profile '%s'?"], cur), function()
+            TW:DeleteProfile(cur)
+            TW:SetActiveProfile("Default")
+            refreshDD()
+            if panel and panel.refreshAll then panel.refreshAll() end
+        end)
+    end)
+
+    y = y - 36
+
+    -- Export
+    local expHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    expHeader:SetPoint("TOPLEFT", 14, y)
+    expHeader:SetText(L["Export"])
+    y = y - 18
+
+    local expScroll = CreateFrame("ScrollFrame", "TWOpt_ExportScroll", page, "InputScrollFrameTemplate")
+    expScroll:SetSize(520, 80)
+    expScroll:SetPoint("TOPLEFT", 14, y)
+    expScroll.EditBox:SetWidth(500)
+    expScroll.EditBox:SetFontObject("ChatFontSmall")
+    expScroll.EditBox:SetMaxLetters(0)
+    expScroll.CharCount:Hide()
+    if expScroll.EditBox.SetCountInvisibleLetters then expScroll.EditBox:SetCountInvisibleLetters(true) end
+
+    local function refreshExport()
+        local s = TW:ExportProfile(TW:GetActiveProfileName()) or ""
+        expScroll.EditBox:SetText(s)
+        expScroll.EditBox:HighlightText(0, 0)
+    end
+
+    y = y - 86
+    mkBtn(L["Refresh export"], 14, y, 140, refreshExport)
+    mkBtn(L["Select all"], 158, y, 100, function()
+        expScroll.EditBox:SetFocus()
+        expScroll.EditBox:HighlightText()
+    end)
+    refreshExport()
+
+    y = y - 30
+
+    -- Import
+    local impHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    impHeader:SetPoint("TOPLEFT", 14, y)
+    impHeader:SetText(L["Import"])
+    y = y - 18
+
+    local impScroll = CreateFrame("ScrollFrame", "TWOpt_ImportScroll", page, "InputScrollFrameTemplate")
+    impScroll:SetSize(520, 80)
+    impScroll:SetPoint("TOPLEFT", 14, y)
+    impScroll.EditBox:SetWidth(500)
+    impScroll.EditBox:SetFontObject("ChatFontSmall")
+    impScroll.EditBox:SetMaxLetters(0)
+    impScroll.CharCount:Hide()
+    if impScroll.EditBox.SetCountInvisibleLetters then impScroll.EditBox:SetCountInvisibleLetters(true) end
+
+    y = y - 86
+    mkBtn(L["Import as new profile..."], 14, y, 200, function()
+        local raw = impScroll.EditBox:GetText()
+        if not raw or raw == "" then
+            print("|cff00ff96TankWatch:|r " .. L["import box is empty"]); return
+        end
+        askName(L["Name for the imported profile:"], function(name)
+            local ok, err = TW:ImportProfile(name, raw)
+            if ok then
+                TW:SetActiveProfile(name)
+                refreshDD()
+                refreshExport()
+                if panel and panel.refreshAll then panel.refreshAll() end
+                print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' imported"], name))
+            else
+                print("|cff00ff96TankWatch:|r " .. L["import failed:"] .. " " .. tostring(err))
+            end
+        end)
+    end)
+
+    page._refreshProfiles = function()
+        refreshDD()
+        refreshExport()
+        charFS:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
+    end
+end
+
 local function buildAboutPage(page)
     local version = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
     local author  = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Author")  or "Timikana"
@@ -523,18 +744,20 @@ local function build()
         return p
     end
 
-    pages.layout = newPage(); buildLayoutPage(pages.layout)
-    pages.bars   = newPage(); buildBarsPage(pages.bars)
-    pages.text   = newPage(); buildTextPage(pages.text)
-    pages.auras  = newPage(); buildAurasPage(pages.auras)
-    pages.about  = newPage(); buildAboutPage(pages.about)
+    pages.layout   = newPage(); buildLayoutPage(pages.layout)
+    pages.bars     = newPage(); buildBarsPage(pages.bars)
+    pages.text     = newPage(); buildTextPage(pages.text)
+    pages.auras    = newPage(); buildAurasPage(pages.auras)
+    pages.profiles = newPage(); buildProfilesPage(pages.profiles)
+    pages.about    = newPage(); buildAboutPage(pages.about)
 
     local tabs = {
-        { id = "layout", label = L["Layout"] },
-        { id = "bars",   label = L["Bars"] },
-        { id = "text",   label = L["Text"] },
-        { id = "auras",  label = L["Auras"] },
-        { id = "about",  label = L["About"] },
+        { id = "layout",   label = L["Layout"] },
+        { id = "bars",     label = L["Bars"] },
+        { id = "text",     label = L["Text"] },
+        { id = "auras",    label = L["Auras"] },
+        { id = "profiles", label = L["Profiles"] },
+        { id = "about",    label = L["About"] },
     }
     local tabBtns = {}
     local function selectTab(id)
@@ -577,6 +800,9 @@ local function build()
             end
         end
         walk(pageHolder)
+        if pages.profiles and pages.profiles._refreshProfiles then
+            pages.profiles._refreshProfiles()
+        end
     end
 
     selectTab("layout")

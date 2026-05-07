@@ -334,6 +334,19 @@ end
 local TEST_NAMES = { "Tankzilla", "Smashbro", "Brickwall", "Ironhide", "Stonewall", "Wallcrusher", "Beefcake", "Bouldermane" }
 local TEST_CLASSES = { "WARRIOR", "PALADIN", "DEATHKNIGHT", "DRUID", "MONK", "DEMONHUNTER", "WARRIOR", "PALADIN" }
 
+local function tickTestFrame(f, db)
+    if not f._testMode or not f.healthBar then return end
+    local cur = f.healthBar:GetValue() or 500
+    -- random walk ±60, clamp 200..1000
+    cur = cur + math.random(-60, 60)
+    if cur < 200 then cur = 200 end
+    if cur > 1000 then cur = 1000 end
+    f.healthBar:SetValue(cur)
+    if f.healthText and db.showHealthText then
+        f.healthText:SetText(formatHP(cur, 1000, db.healthTextFormat))
+    end
+end
+
 function TW:SetTestMode(count)
     count = math.max(0, math.min(MAX_TANKS, count or 0))
     for i = 1, MAX_TANKS do
@@ -348,7 +361,7 @@ function TW:SetTestMode(count)
             local c = CLASS_COLORS[cls] or { r=0.5, g=0.5, b=0.5 }
             if f.nameText then
                 f.nameText:SetText(TEST_NAMES[i] or ("Tank" .. i))
-                f.nameText:SetTextColor(c.r, c.g, c.b)
+                f.nameText:SetTextColor(1, 1, 1)
                 f.nameText:Show()
             end
             if f.healthBar then
@@ -371,6 +384,32 @@ function TW:SetTestMode(count)
     end
     ApplyLayout()
     if TW.ApplyFonts then TW:ApplyFonts() end
+
+    -- Spawn / refresh the test ticker
+    if not TW._testTicker then
+        TW._testTicker = CreateFrame("Frame")
+        TW._testTicker._acc = 0
+        TW._testTicker:SetScript("OnUpdate", function(self, elapsed)
+            self._acc = (self._acc or 0) + elapsed
+            if self._acc < 0.4 then return end
+            self._acc = 0
+            local anyTest = false
+            local db = TW:GetDB()
+            for i = 1, MAX_TANKS do
+                local f = TW.TankFrames[i]
+                if f and f._testMode then
+                    anyTest = true
+                    tickTestFrame(f, db)
+                end
+            end
+            if not anyTest then self:Hide() end
+        end)
+    end
+    local anyTest = false
+    for i = 1, MAX_TANKS do
+        if TW.TankFrames[i] and TW.TankFrames[i]._testMode then anyTest = true; break end
+    end
+    if anyTest then TW._testTicker:Show() else TW._testTicker:Hide() end
 end
 
 -- ============================================================
