@@ -108,13 +108,22 @@ end
 -- ============================================================
 -- AURA FILTER + UPDATE
 -- ============================================================
-local function isBossDebuff(aura)
+local function getSpellID(aura)
+    local ok, sid = pcall(function() return aura.spellId end)
+    if ok and sid then return sid end
+    return nil
+end
+
+local function passesFilter(aura, db)
     if not aura then return false end
-    -- isBossAura is true for boss-cast HARMFUL auras (Blizzard's tag).
-    -- It's also a "secret value" sometimes; wrap in pcall.
+    local sid = getSpellID(aura)
+    if sid then
+        if db.auraBlacklist and db.auraBlacklist[sid] then return false end
+        if db.auraWhitelist and db.auraWhitelist[sid] then return true  end
+    end
+    -- default: only boss-cast (isBossAura is sometimes a secret value, hence pcall)
     local ok, isBoss = pcall(function() return aura.isBossAura end)
-    if ok and isBoss then return true end
-    return false
+    return ok and isBoss == true
 end
 
 local function getStacks(aura)
@@ -133,7 +142,7 @@ function TW.UpdateAuras(frame)
     local found = {}
     pcall(function()
         AuraUtil.ForEachAura(frame._unit, "HARMFUL", maxCount * 4, function(aura)
-            if isBossDebuff(aura) then
+            if passesFilter(aura, db) then
                 local stacks = getStacks(aura)
                 if not db.aurasOnlyStacks or stacks > 1 then
                     found[#found + 1] = aura

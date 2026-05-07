@@ -15,6 +15,25 @@ local _pendingLayout = false
 -- ============================================================
 -- TANK DETECTION
 -- ============================================================
+local function isMyTankSpec()
+    local spec = GetSpecialization and GetSpecialization()
+    if not spec then return false end
+    local role
+    if GetSpecializationRole then
+        local ok, r = pcall(GetSpecializationRole, spec)
+        if ok then role = r end
+    end
+    return role == "TANK"
+end
+
+local function alreadyContains(units, unit)
+    for _, u in ipairs(units) do
+        local ok, same = pcall(UnitIsUnit, u, unit)
+        if ok and same then return true end
+    end
+    return false
+end
+
 local function collectTankUnits()
     local units = {}
     if IsInRaid() then
@@ -35,11 +54,48 @@ local function collectTankUnits()
             end
         end
     else
-        -- Solo: show the player if their role is TANK or their spec is tank
         if UnitGroupRolesAssigned("player") == "TANK" then
             units[#units + 1] = "player"
         end
     end
+
+    local db = TW:GetDB()
+
+    -- Force-include self if my spec is tank (RL forgot to assign me)
+    if db.forceIncludeSelf and isMyTankSpec() and not alreadyContains(units, "player") then
+        local me = "player"
+        if IsInRaid() then
+            for i = 1, GetNumGroupMembers() do
+                local ru = "raid" .. i
+                local ok, same = pcall(UnitIsUnit, ru, "player")
+                if ok and same then me = ru; break end
+            end
+        end
+        table.insert(units, 1, me)
+    end
+
+    -- Force-include named players, if any are in the group
+    local names = db.forceIncludeNames
+    if names and next(names) then
+        local lower = {}
+        for n in pairs(names) do lower[n:lower()] = true end
+
+        local function tryAdd(unit)
+            if not UnitExists(unit) or alreadyContains(units, unit) then return end
+            local ok, name = pcall(UnitName, unit)
+            if ok and name and lower[name:lower()] then
+                units[#units + 1] = unit
+            end
+        end
+
+        if IsInRaid() then
+            for i = 1, GetNumGroupMembers() do tryAdd("raid" .. i) end
+        elseif IsInGroup() then
+            tryAdd("player")
+            for i = 1, 4 do tryAdd("party" .. i) end
+        end
+    end
+
     return units
 end
 
@@ -126,6 +182,7 @@ function TW:EnsureCreated()
         TW.TankFrames[i] = CreateTankFrame(i)
         TW.TankFrames[i]:SetParent(container)
     end
+    startRangeTicker()
 end
 
 -- ============================================================
@@ -334,17 +391,13 @@ end
 local TEST_NAMES = { "Tankzilla", "Smashbro", "Brickwall", "Ironhide", "Stonewall", "Wallcrusher", "Beefcake", "Bouldermane" }
 local TEST_CLASSES = { "WARRIOR", "PALADIN", "DEATHKNIGHT", "DRUID", "MONK", "DEMONHUNTER", "WARRIOR", "PALADIN" }
 
-local function tickTestFrame(f, db)
-    if not f._testMode or not f.healthBar then return end
-    local cur = f.healthBar:GetValue() or 500
-    -- random walk ±60, clamp 200..1000
-    cur = cur + math.random(-60, 60)
-    if cur < 200 then cur = 200 end
-    if cur > 1000 then cur = 1000 end
-    f.healthBar:SetValue(cur)
-    if f.healthText and db.showHealthText then
-        f.healthText:SetText(formatHP(cur, 1000, db.healthTextFormat))
-    end
+-- per-frame interpolation toward a random target → fluid test animation
+local function pickTestTarget(f)
+    local cur = f._testHP or 700
+    local t = cur + math.random(-260, 260)
+    if t < 150 then t = 150 + math.random(0, 100) end
+    if t > 1000 then t = 850 + math.random(0, 150) end
+    f._testHPTarget = t
 end
 
 function TW:SetTestMode(count)
@@ -385,21 +438,37 @@ function TW:SetTestMode(count)
     ApplyLayout()
     if TW.ApplyFonts then TW:ApplyFonts() end
 
-    -- Spawn / refresh the test ticker
+    -- Spawn / refresh the test ticker (every frame; smooth interpolation)
     if not TW._testTicker then
         TW._testTicker = CreateFrame("Frame")
         TW._testTicker._acc = 0
         TW._testTicker:SetScript("OnUpdate", function(self, elapsed)
             self._acc = (self._acc or 0) + elapsed
-            if self._acc < 0.4 then return end
-            self._acc = 0
+            local pickNew = self._acc >= 0.5
+            if pickNew then self._acc = 0 end
+
             local anyTest = false
             local db = TW:GetDB()
             for i = 1, MAX_TANKS do
                 local f = TW.TankFrames[i]
-                if f and f._testMode then
+                if f and f._testMode and f.healthBar then
                     anyTest = true
-                    tickTestFrame(f, db)
+                    f._testHP       = f._testHP       or f.healthBar:GetValue() or 700
+                    f._testHPTarget = f._testHPTarget or f._testHP
+                    if pickNew then pickTestTarget(f) end
+
+                    -- exponential ease toward target (rate ~6/s)
+                    local rate   = 6 * elapsed
+                    if rate > 1 then rate = 1 end
+                    local cur    = f._testHP
+                    local target = f._testHPTarget
+                    cur = cur + (target - cur) * rate
+                    f._testHP = cur
+
+                    f.healthBar:SetValue(cur)
+                    if f.healthText and db.showHealthText then
+                        f.healthText:SetText(formatHP(cur, 1000, db.healthTextFormat))
+                    end
                 end
             end
             if not anyTest then self:Hide() end
@@ -413,11 +482,48 @@ function TW:SetTestMode(count)
 end
 
 -- ============================================================
+-- RANGE FADE (poll every 0.4s — UnitInRange is the right API)
+-- ============================================================
+local function startRangeTicker()
+    if TW._rangeTicker then return end
+    local t = CreateFrame("Frame")
+    t._acc = 0
+    t:SetScript("OnUpdate", function(self, elapsed)
+        self._acc = (self._acc or 0) + elapsed
+        if self._acc < 0.4 then return end
+        self._acc = 0
+        local db = TW:GetDB()
+        local enabled = db.rangeFadeEnabled
+        local fadeAlpha = db.rangeFadeAlpha or 0.4
+        for i = 1, MAX_TANKS do
+            local f = TW.TankFrames[i]
+            if f and f:IsShown() then
+                if f._testMode then
+                    f:SetAlpha(1)
+                elseif not enabled then
+                    f:SetAlpha(1)
+                else
+                    local unit = f._unit
+                    local inRange = true
+                    if unit and unit ~= "player" then
+                        local ok, r = pcall(UnitInRange, unit)
+                        if ok and r == false then inRange = false end
+                    end
+                    f:SetAlpha(inRange and 1 or fadeAlpha)
+                end
+            end
+        end
+    end)
+    TW._rangeTicker = t
+end
+
+-- ============================================================
 -- EVENTS
 -- ============================================================
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:RegisterEvent("PLAYER_ROLES_ASSIGNED")
+ev:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("UNIT_HEALTH")
@@ -427,7 +533,8 @@ ev:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
         TW:RefreshTanks()
-    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_ENTERING_WORLD" then
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
+        or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         TW:RefreshTanks()
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA" then
         for i = 1, MAX_TANKS do

@@ -39,6 +39,32 @@ L["Left-click: options"] = "Clic gauche : options"
 L["Right-click: mover"]  = "Clic droit : mover"
 L["Drag: reposition"]    = "Glisser : repositionner"
 
+-- Range fade
+L["Fade out-of-range tanks"] = "Estomper les tanks hors de portée"
+L["Out-of-range alpha"]      = "Alpha hors de portée"
+
+-- Filters
+L["Filters"]                                                              = "Filtres"
+L["Whitelist (always show)"]                                              = "Whitelist (toujours afficher)"
+L["Blacklist (never show)"]                                               = "Blacklist (ne jamais afficher)"
+L["Spell ID:"]                                                            = "ID du sort :"
+L["Add"]                                                                  = "Ajouter"
+L["unknown spell ID %d"]                                                  = "ID de sort inconnu %d"
+L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast. Both keyed by spell ID."] =
+    "La whitelist force un debuff à s'afficher même s'il n'est pas lancé par un boss (ex : trash en M+). La blacklist masque un debuff même s'il est lancé par un boss. Les deux sont indexées par ID de sort."
+L["Only boss-cast HARMFUL auras are shown by default. Use the Filters tab to whitelist M+ debuffs or blacklist noise."] =
+    "Par défaut, seules les auras HARMFUL lancées par les boss sont affichées. Utilise l'onglet Filtres pour whitelister les debuffs M+ ou blacklister le bruit."
+
+-- Filters: tank inclusion section
+L["Force-include tanks"]                       = "Inclure de force comme tank"
+L["Always include me if my spec is tank"]      = "Toujours m'inclure si ma spé est tank"
+L["Always include these players (added on top of RL-assigned tanks):"] =
+    "Toujours inclure ces joueurs (en plus des tanks assignés par le RL) :"
+L["Player name:"]                              = "Nom du joueur :"
+L["Debuff filters"]                            = "Filtres de debuffs"
+L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."] =
+    "La whitelist force un debuff à s'afficher même s'il n'est pas lancé par un boss (ex : trash en M+). La blacklist masque un debuff même s'il est lancé par un boss."
+
 -- Window
 L["TankWatch — Options"] = "TankWatch — Options"
 
@@ -115,6 +141,8 @@ L["See every tank in your group with their boss-cast debuffs and stack counts."]
     "Voir tous les tanks de votre groupe avec leurs debuffs lancés par les boss et le nombre de stacks."
 L["Author:"]        = "Auteur :"
 L["Slash commands"] = "Commandes slash"
+L["GitHub:"]                                = "GitHub :"
+L["Click the field above and Ctrl+C to copy."] = "Clique le champ ci-dessus puis Ctrl+C pour copier."
 L["open options"]   = "ouvrir les options"
 
 -- Blizzard settings

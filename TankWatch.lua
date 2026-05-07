@@ -31,6 +31,16 @@ TW.Defaults = {
     showAuras = true, aurasMaxCount = 5, aurasSize = 28, aurasSpacing = 2,
     aurasAnchor = "RIGHT", aurasX = 6, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
+    auraWhitelist = {},      -- [spellID] = true  → force-show even if not boss-cast
+    auraBlacklist = {},      -- [spellID] = true  → never show
+
+    -- Range fade
+    rangeFadeEnabled = true,
+    rangeFadeAlpha   = 0.4,
+
+    -- Force-include self if my spec is tank but the RL didn't assign me TANK
+    forceIncludeSelf  = false,
+    forceIncludeNames = {}, -- [normalizedName] = true → always treat them as a tank
 
     -- Font
     fontFace = "Friz Quadrata TT", fontSize = 12, fontOutline = "OUTLINE",
@@ -339,7 +349,7 @@ function TW:CreateMinimapButton()
 
     local icon = b:CreateTexture(nil, "BACKGROUND")
     icon:SetSize(20, 20); icon:SetPoint("CENTER", b, "CENTER", 0, 1)
-    icon:SetTexture([[Interface\Icons\Spell_Holy_GreaterBlessingofKings]])
+    icon:SetTexture([[Interface\AddOns\TankWatch\Media\icon]])
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     local border = b:CreateTexture(nil, "OVERLAY")

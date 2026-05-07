@@ -415,6 +415,9 @@ local function buildBarsPage(page)
     }, 14, y, 180)
     y = y - 50
     makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 14, y)
+    y = y - 50
+    makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y)
+    makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y)
 end
 
 local function buildTextPage(page)
@@ -463,8 +466,8 @@ local function buildAurasPage(page)
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 14, y)
     note:SetWidth(520); note:SetJustifyH("LEFT")
-    note:SetText(L["Only boss-cast HARMFUL auras are shown. The stack count is rendered big in the icon center."])
-    y = y - 30
+    note:SetText(L["Only boss-cast HARMFUL auras are shown by default. Use the Filters tab to whitelist M+ debuffs or blacklist noise."])
+    y = y - 34
     makeSlider(page, L["Max Count"], "aurasMaxCount", 1, 10, 1, 14, y)
     makeSlider(page, L["Size"], "aurasSize", 16, 64, 1, 260, y)
     y = y - 50
@@ -478,6 +481,243 @@ local function buildAurasPage(page)
     y = y - 50
     makeSlider(page, L["Offset X"], "aurasX", -200, 200, 1, 14, y)
     makeSlider(page, L["Offset Y"], "aurasY", -200, 200, 1, 260, y)
+end
+
+-- ============================================================
+-- SPELL LIST WIDGET (used by Filters tab)
+-- ============================================================
+local function getSpellInfo(id)
+    if C_Spell and C_Spell.GetSpellInfo then
+        local info = C_Spell.GetSpellInfo(id)
+        if info then return info.name, info.iconID end
+    end
+    if GetSpellInfo then
+        local n, _, ic = GetSpellInfo(id)
+        return n, ic
+    end
+    return nil, nil
+end
+
+local ROW_H = 22
+local function makeSpellList(parent, dbKey, title, x, y, w, h)
+    local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    header:SetPoint("TOPLEFT", x, y)
+    header:SetText(title)
+
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetPoint("TOPLEFT", x, y - 18)
+    frame:SetSize(w, h)
+    frame:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    frame:SetBackdropColor(0.05, 0.05, 0.07, 0.9)
+    frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 4, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -24, 4)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(w - 32, 10)
+    scroll:SetScrollChild(content)
+
+    local pool = {}
+    local function getRow(i)
+        if pool[i] then return pool[i] end
+        local r = CreateFrame("Frame", nil, content)
+        r:SetSize(w - 32, ROW_H)
+        r:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
+        local ic = r:CreateTexture(nil, "ARTWORK")
+        ic:SetSize(18, 18); ic:SetPoint("LEFT", 2, 0)
+        ic:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", ic, "RIGHT", 6, 0)
+        fs:SetPoint("RIGHT", r, "RIGHT", -22, 0)
+        fs:SetJustifyH("LEFT")
+        local rm = CreateFrame("Button", nil, r, "UIPanelCloseButton")
+        rm:SetSize(18, 18); rm:SetPoint("RIGHT", 0, 0)
+        r.icon, r.text, r.rm = ic, fs, rm
+        pool[i] = r
+        return r
+    end
+
+    local refresh
+    local function rebuild()
+        local db = TW:GetDB()
+        local t = db[dbKey] or {}
+        local ids = {}
+        for id in pairs(t) do ids[#ids + 1] = id end
+        table.sort(ids)
+        for i = 1, #ids do
+            local id = ids[i]
+            local r = getRow(i)
+            r:Show()
+            local n, ic = getSpellInfo(id)
+            r.icon:SetTexture(ic or 134400) -- ? icon fallback
+            r.text:SetText((n or "Unknown") .. "  |cffaaaaaa(" .. id .. ")|r")
+            r.rm:SetScript("OnClick", function()
+                TW:GetDB()[dbKey][id] = nil
+                refresh()
+                if TW.RefreshAll then TW:RefreshAll() end
+            end)
+        end
+        for i = #ids + 1, #pool do pool[i]:Hide() end
+        content:SetHeight(math.max(ROW_H, #ids * ROW_H))
+    end
+    refresh = rebuild
+
+    -- Add row at the bottom of the list area
+    local addLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    addLabel:SetPoint("TOPLEFT", x, y - 18 - h - 4)
+    addLabel:SetText(L["Spell ID:"])
+    local edit = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    edit:SetSize(80, 22)
+    edit:SetPoint("LEFT", addLabel, "RIGHT", 8, 0)
+    edit:SetAutoFocus(false)
+    edit:SetNumeric(true)
+
+    local addBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    addBtn:SetSize(60, 22)
+    addBtn:SetPoint("LEFT", edit, "RIGHT", 6, 0)
+    addBtn:SetText(L["Add"])
+    local function doAdd()
+        local id = tonumber(edit:GetText())
+        if not id or id <= 0 then return end
+        local n = getSpellInfo(id)
+        if not n then
+            print("|cff00ff96TankWatch:|r " .. format(L["unknown spell ID %d"], id))
+            return
+        end
+        local db = TW:GetDB()
+        db[dbKey] = db[dbKey] or {}
+        db[dbKey][id] = true
+        edit:SetText("")
+        refresh()
+        if TW.RefreshAll then TW:RefreshAll() end
+    end
+    addBtn:SetScript("OnClick", doAdd)
+    edit:SetScript("OnEnterPressed", function(self) doAdd(); self:ClearFocus() end)
+
+    return { refresh = refresh }
+end
+
+-- Name list widget (player names) — same shape as makeSpellList but accepts strings
+local function makeNameList(parent, dbKey, title, x, y, w, h)
+    local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    header:SetPoint("TOPLEFT", x, y); header:SetText(title)
+
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetPoint("TOPLEFT", x, y - 16)
+    frame:SetSize(w, h)
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
+    })
+    frame:SetBackdropColor(0.05, 0.05, 0.07, 0.9)
+    frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 4, -4); scroll:SetPoint("BOTTOMRIGHT", -24, 4)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(w - 32, 10); scroll:SetScrollChild(content)
+
+    local pool = {}
+    local function getRow(i)
+        if pool[i] then return pool[i] end
+        local r = CreateFrame("Frame", nil, content)
+        r:SetSize(w - 32, ROW_H)
+        r:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
+        local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", 6, 0); fs:SetPoint("RIGHT", -22, 0); fs:SetJustifyH("LEFT")
+        local rm = CreateFrame("Button", nil, r, "UIPanelCloseButton")
+        rm:SetSize(18, 18); rm:SetPoint("RIGHT", 0, 0)
+        r.text, r.rm = fs, rm
+        pool[i] = r
+        return r
+    end
+
+    local refresh
+    local function rebuild()
+        local db = TW:GetDB()
+        local t = db[dbKey] or {}
+        local names = {}
+        for n in pairs(t) do names[#names + 1] = n end
+        table.sort(names, function(a, b) return a:lower() < b:lower() end)
+        for i, name in ipairs(names) do
+            local r = getRow(i); r:Show()
+            r.text:SetText(name)
+            r.rm:SetScript("OnClick", function()
+                TW:GetDB()[dbKey][name] = nil
+                refresh(); if TW.RefreshTanks then TW:RefreshTanks() end
+            end)
+        end
+        for i = #names + 1, #pool do pool[i]:Hide() end
+        content:SetHeight(math.max(ROW_H, #names * ROW_H))
+    end
+    refresh = rebuild
+
+    local addLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    addLabel:SetPoint("TOPLEFT", x, y - 16 - h - 4)
+    addLabel:SetText(L["Player name:"])
+    local edit = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    edit:SetSize(140, 22)
+    edit:SetPoint("LEFT", addLabel, "RIGHT", 8, 0)
+    edit:SetAutoFocus(false)
+
+    local addBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    addBtn:SetSize(60, 22)
+    addBtn:SetPoint("LEFT", edit, "RIGHT", 6, 0)
+    addBtn:SetText(L["Add"])
+    local function doAdd()
+        local n = (edit:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if n == "" then return end
+        local db = TW:GetDB()
+        db[dbKey] = db[dbKey] or {}
+        db[dbKey][n] = true
+        edit:SetText("")
+        refresh(); if TW.RefreshTanks then TW:RefreshTanks() end
+    end
+    addBtn:SetScript("OnClick", doAdd)
+    edit:SetScript("OnEnterPressed", function(self) doAdd(); self:ClearFocus() end)
+
+    return { refresh = refresh }
+end
+
+local function buildFiltersPage(page)
+    local y = -10
+
+    -- ── Tank inclusion section ───────────────────────────────
+    local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Force-include tanks"])
+    y = y - 18
+
+    makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y)
+    y = y - 28
+
+    local nl = makeNameList(page, "forceIncludeNames",
+        L["Always include these players (added on top of RL-assigned tanks):"],
+        14, y, 360, 70)
+    y = y - 16 - 70 - 30
+
+    -- ── Debuff filters section ───────────────────────────────
+    local dh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    dh:SetPoint("TOPLEFT", 14, y); dh:SetText(L["Debuff filters"])
+    y = y - 18
+
+    local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", 14, y)
+    note:SetWidth(520); note:SetJustifyH("LEFT")
+    note:SetText(L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."])
+    y = y - 32
+
+    local listH = 170
+    local listW = 240
+    local wl = makeSpellList(page, "auraWhitelist", L["Whitelist (always show)"], 14,             y, listW, listH)
+    local bl = makeSpellList(page, "auraBlacklist", L["Blacklist (never show)"],  14 + listW + 22, y, listW, listH)
+
+    page._refreshFilters = function() wl.refresh(); bl.refresh(); nl.refresh() end
+    page._refreshFilters()
 end
 
 -- ============================================================
@@ -689,21 +929,51 @@ local function buildAboutPage(page)
     local version = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
     local author  = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Author")  or "Timikana"
 
-    local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 14, -14)
-    title:SetText("|cff00ff96TankWatch|r  v" .. version)
+    -- Logo
+    local logo = page:CreateTexture(nil, "ARTWORK")
+    logo:SetSize(96, 96)
+    logo:SetPoint("TOPLEFT", 14, -14)
+    logo:SetTexture([[Interface\AddOns\TankWatch\Media\icon]])
+
+    local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    title:SetPoint("TOPLEFT", logo, "TOPRIGHT", 14, -4)
+    title:SetText("|cff00ff96TankWatch|r")
+
+    local ver = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    ver:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
+    ver:SetText("v" .. version)
 
     local sub = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    sub:SetWidth(520); sub:SetJustifyH("LEFT")
+    sub:SetPoint("TOPLEFT", ver, "BOTTOMLEFT", 0, -10)
+    sub:SetWidth(380); sub:SetJustifyH("LEFT")
     sub:SetText(L["See every tank in your group with their boss-cast debuffs and stack counts."])
 
     local byLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -16)
+    byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -10)
     byLabel:SetText(L["Author:"] .. " |cffffffff" .. author .. "|r")
 
+    -- GitHub link (selectable for copy)
+    local ghLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    ghLabel:SetPoint("TOPLEFT", logo, "BOTTOMLEFT", 0, -16)
+    ghLabel:SetText(L["GitHub:"])
+
+    local ghEdit = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+    ghEdit:SetSize(360, 22)
+    ghEdit:SetPoint("LEFT", ghLabel, "RIGHT", 8, 0)
+    ghEdit:SetAutoFocus(false)
+    ghEdit:SetText("https://github.com/Timikana/TankWatch")
+    ghEdit:SetCursorPosition(0)
+    ghEdit:SetScript("OnEscapePressed", ghEdit.ClearFocus)
+    ghEdit:SetScript("OnEnterPressed",  ghEdit.ClearFocus)
+    ghEdit:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+
+    local copyHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    copyHint:SetPoint("TOPLEFT", ghLabel, "BOTTOMLEFT", 0, -16)
+    copyHint:SetText(L["Click the field above and Ctrl+C to copy."])
+
+    -- Slash commands
     local cmdHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOPLEFT", 14, -120)
+    cmdHeader:SetPoint("TOPLEFT", 14, -180)
     cmdHeader:SetText(L["Slash commands"])
 
     local cmds = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -748,6 +1018,7 @@ local function build()
     pages.bars     = newPage(); buildBarsPage(pages.bars)
     pages.text     = newPage(); buildTextPage(pages.text)
     pages.auras    = newPage(); buildAurasPage(pages.auras)
+    pages.filters  = newPage(); buildFiltersPage(pages.filters)
     pages.profiles = newPage(); buildProfilesPage(pages.profiles)
     pages.about    = newPage(); buildAboutPage(pages.about)
 
@@ -756,6 +1027,7 @@ local function build()
         { id = "bars",     label = L["Bars"] },
         { id = "text",     label = L["Text"] },
         { id = "auras",    label = L["Auras"] },
+        { id = "filters",  label = L["Filters"] },
         { id = "profiles", label = L["Profiles"] },
         { id = "about",    label = L["About"] },
     }
@@ -802,6 +1074,9 @@ local function build()
         walk(pageHolder)
         if pages.profiles and pages.profiles._refreshProfiles then
             pages.profiles._refreshProfiles()
+        end
+        if pages.filters and pages.filters._refreshFilters then
+            pages.filters._refreshFilters()
         end
     end
 
