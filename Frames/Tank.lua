@@ -7,10 +7,23 @@ local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local IsInRaid, IsInGroup = IsInRaid, IsInGroup
 local GetNumGroupMembers = GetNumGroupMembers
 local format = string.format
+local AbbreviateNumbers = AbbreviateNumbers
 
 local MAX_TANKS = TW.MAX_TANKS
 
 local _pendingLayout = false
+
+-- Secret-value detection (12.0). issecretvalue is a global Blizzard fn.
+local issecretvalue = _G.issecretvalue
+local function isSecret(v)
+    if issecretvalue then return issecretvalue(v) end
+    return false
+end
+
+
+
+-- Forward declaration (defined further down) so EnsureCreated can call it.
+local startRangeTicker
 
 -- ============================================================
 -- TANK DETECTION
@@ -28,38 +41,95 @@ end
 
 local function alreadyContains(units, unit)
     for _, u in ipairs(units) do
+        if u == unit then return true end -- same regular unit token
         local ok, same = pcall(UnitIsUnit, u, unit)
-        if ok and same then return true end
+        if ok and same ~= nil and not isSecret(same) and same == true then
+            return true
+        end
     end
     return false
 end
 
+local function isTankByRole(unit)
+    local ok, r = pcall(UnitGroupRolesAssigned, unit)
+    if not ok or r == nil or isSecret(r) then return false end
+    return r == "TANK"
+end
+
+local function isMainTank(unit)
+    if not GetPartyAssignment then return false end
+    local ok, r = pcall(GetPartyAssignment, "MAINTANK", unit)
+    if not ok or r == nil or isSecret(r) then return false end
+    return r == 1 or r == true
+end
+
+local function isTankUnit(unit, mode)
+    if mode == "MAINTANK" then return isMainTank(unit)
+    elseif mode == "BOTH" then return isMainTank(unit) or isTankByRole(unit)
+    else                        return isTankByRole(unit) end
+end
+
+function TW:PrintRosterDebug()
+    print("|cff00ff96TankWatch:|r " .. (TW.L and TW.L["roster diagnostic:"] or "roster diagnostic:"))
+    local function dump(u)
+        if not UnitExists(u) then return end
+        local name = "?"
+        pcall(function() name = UnitName(u) or "?" end)
+        local role = "?"
+        pcall(function() role = UnitGroupRolesAssigned(u) or "?" end)
+        local mt = false
+        if GetPartyAssignment then
+            pcall(function() mt = (GetPartyAssignment("MAINTANK", u) == 1) end)
+        end
+        print(string.format("  %s = |cffffffff%s|r | role=|cffffff00%s|r | /maintank=|cffffff00%s|r",
+            u, tostring(name), tostring(role), tostring(mt)))
+    end
+    if IsInRaid() then
+        local n = GetNumGroupMembers()
+        print(string.format("  raid (%d):", n))
+        for i = 1, n do dump("raid" .. i) end
+    elseif IsInGroup() then
+        print("  party:")
+        dump("player")
+        for i = 1, 4 do dump("party" .. i) end
+    else
+        print("  solo")
+        dump("player")
+    end
+end
+
 local function collectTankUnits()
+    local db   = TW:GetDB()
+
+    -- Visibility scope: hide everything if the current group state doesn't
+    -- match what the user wants to see frames in.
+    local vis = db.visibilityMode or "GROUP"
+    if vis == "RAID"  and not IsInRaid()  then return {} end
+    if vis == "GROUP" and not IsInGroup() then return {} end
+
+    local mode = db.tankDetection or "ROLE"
+    -- /maintank only exists in raids — auto-fallback to ROLE in 5-man
+    if mode == "MAINTANK" and not IsInRaid() then mode = "ROLE" end
+
     local units = {}
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
             local u = "raid" .. i
-            if UnitExists(u) and UnitGroupRolesAssigned(u) == "TANK" then
+            if UnitExists(u) and isTankUnit(u, mode) then
                 units[#units + 1] = u
             end
         end
     elseif IsInGroup() then
-        if UnitGroupRolesAssigned("player") == "TANK" then
-            units[#units + 1] = "player"
-        end
+        if isTankUnit("player", mode) then units[#units + 1] = "player" end
         for i = 1, 4 do
             local u = "party" .. i
-            if UnitExists(u) and UnitGroupRolesAssigned(u) == "TANK" then
+            if UnitExists(u) and isTankUnit(u, mode) then
                 units[#units + 1] = u
             end
         end
     else
-        if UnitGroupRolesAssigned("player") == "TANK" then
-            units[#units + 1] = "player"
-        end
+        if isTankUnit("player", mode) then units[#units + 1] = "player" end
     end
-
-    local db = TW:GetDB()
 
     -- Force-include self if my spec is tank (RL forgot to assign me)
     if db.forceIncludeSelf and isMyTankSpec() and not alreadyContains(units, "player") then
@@ -83,7 +153,8 @@ local function collectTankUnits()
         local function tryAdd(unit)
             if not UnitExists(unit) or alreadyContains(units, unit) then return end
             local ok, name = pcall(UnitName, unit)
-            if ok and name and lower[name:lower()] then
+            if not ok or not name or isSecret(name) then return end
+            if lower[name:lower()] then
                 units[#units + 1] = unit
             end
         end
@@ -101,15 +172,32 @@ end
 
 -- ============================================================
 -- COLOR HELPERS
+-- ----------------------------------------------------------------
+-- RAID_CLASS_COLORS is a "secret value" in WoW 12.0 / Midnight —
+-- touching its fields taints execution. We use hardcoded literals
+-- (the public class color values) so we never read a secret value.
 -- ============================================================
-local CLASS_COLORS = RAID_CLASS_COLORS or {}
+local CLASS_COLORS = {
+    DEATHKNIGHT = { r = 0.77, g = 0.12, b = 0.23 },
+    DEMONHUNTER = { r = 0.64, g = 0.19, b = 0.79 },
+    DRUID       = { r = 1.00, g = 0.49, b = 0.04 },
+    EVOKER      = { r = 0.20, g = 0.58, b = 0.50 },
+    HUNTER      = { r = 0.67, g = 0.83, b = 0.45 },
+    MAGE        = { r = 0.25, g = 0.78, b = 0.92 },
+    MONK        = { r = 0.00, g = 1.00, b = 0.59 },
+    PALADIN     = { r = 0.96, g = 0.55, b = 0.73 },
+    PRIEST      = { r = 1.00, g = 1.00, b = 1.00 },
+    ROGUE       = { r = 1.00, g = 0.96, b = 0.41 },
+    SHAMAN      = { r = 0.00, g = 0.44, b = 0.87 },
+    WARLOCK     = { r = 0.53, g = 0.53, b = 0.93 },
+    WARRIOR     = { r = 0.78, g = 0.61, b = 0.43 },
+}
 
 local function classColor(unit)
-    local _, cls = pcall(UnitClass, unit)
-    if cls and CLASS_COLORS[cls] then
-        local c = CLASS_COLORS[cls]
-        return c.r, c.g, c.b
-    end
+    local ok, _, cls = pcall(UnitClass, unit)
+    if not ok or not cls or isSecret(cls) then return 0.5, 0.5, 0.5 end
+    local c = CLASS_COLORS[cls]
+    if c then return c.r, c.g, c.b end
     return 0.5, 0.5, 0.5
 end
 
@@ -176,6 +264,7 @@ function TW:EnsureCreated()
     if TW.TankContainer then return end
     local container = CreateFrame("Frame", "TankWatchContainer", UIParent)
     container:SetSize(200, 100)
+    container:SetClampedToScreen(true)
     TW.TankContainer = container
 
     for i = 1, MAX_TANKS do
@@ -269,11 +358,13 @@ local function UpdateFrame(f)
     -- Name
     if f.nameText then
         if db.showName then
-            local n = pcall(UnitName, unit)
             local ok, name = pcall(UnitName, unit)
             if not ok or not name then name = "?" end
-            local maxLen = db.nameMaxLength or 0
-            if maxLen > 0 and #name > maxLen then name = name:sub(1, maxLen) end
+            -- Don't compute length on a secret string (#secret taints).
+            if not isSecret(name) then
+                local maxLen = db.nameMaxLength or 0
+                if maxLen > 0 and #name > maxLen then name = name:sub(1, maxLen) end
+            end
             f.nameText:SetText(name)
             f.nameText:Show()
         else
@@ -282,18 +373,48 @@ local function UpdateFrame(f)
     end
 
     -- HP
-    local cur, max = 0, 0
+    -- 12.0: UnitHealth on group members returns a SECRET number. Bar
+    -- handles it (SetValue accepts secrets). For text, we use
+    -- AbbreviateNumbers (Blizzard C function that accepts secret input
+    -- and returns a regular display string). PERCENT format can't be
+    -- computed (would need cur/max arithmetic) → falls back to absolute.
+    local cur, max
     pcall(function()
-        cur = UnitHealth(unit) or 0
+        cur = UnitHealth(unit)
         max = UnitHealthMax(unit) or 0
     end)
-    if f.healthBar and max > 0 then
+    if f.healthBar and max and max > 0 then
         f.healthBar:SetMinMaxValues(0, max)
-        f.healthBar:SetValue(cur)
+        if cur ~= nil then
+            pcall(f.healthBar.SetValue, f.healthBar, cur)
+        else
+            f.healthBar:SetValue(0)
+        end
     end
     if f.healthText then
-        if db.showHealthText and max > 0 then
-            f.healthText:SetText(formatHP(cur, max, db.healthTextFormat))
+        if db.showHealthText and cur ~= nil and max and max > 0 then
+            -- Migrate legacy PERCENT / CURRENT_PERCENT (no longer feasible
+            -- on live units in 12.0) to CURRENT.
+            local fmt = db.healthTextFormat
+            if fmt == "PERCENT" or fmt == "CURRENT_PERCENT" or not fmt then
+                fmt = "CURRENT"
+                db.healthTextFormat = fmt
+            end
+            if not isSecret(cur) and not isSecret(max) then
+                f.healthText:SetText(formatHP(cur, max, fmt))
+            else
+                local curStr
+                if AbbreviateNumbers then
+                    pcall(function() curStr = AbbreviateNumbers(cur) end)
+                end
+                if not curStr then curStr = "?" end
+                if fmt == "CURRENT_MAX" then
+                    local maxStr = AbbreviateNumbers and AbbreviateNumbers(max) or tostring(max)
+                    f.healthText:SetText(curStr .. " / " .. maxStr)
+                else -- CURRENT
+                    f.healthText:SetText(curStr)
+                end
+            end
             f.healthText:Show()
         else
             f.healthText:Hide()
@@ -323,7 +444,13 @@ local function RefreshAll()
     if TW.ApplyFonts then TW:ApplyFonts() end
     for i = 1, MAX_TANKS do
         local f = TW.TankFrames[i]
-        if f and f:IsShown() then UpdateFrame(f) end
+        if f and f:IsShown() then
+            if f._testMode then
+                if TW._applyTestFrameSettings then TW._applyTestFrameSettings(f, i) end
+            else
+                UpdateFrame(f)
+            end
+        end
     end
 end
 TW.RefreshAll = RefreshAll
@@ -355,6 +482,40 @@ end
 -- ============================================================
 -- MOVER
 -- ============================================================
+-- Snap-to-edge: if container ends within SNAP px of an edge, anchor to that edge.
+-- Otherwise stay centered on that axis (with offset from center).
+local SNAP_DIST = 16
+local function snapAndStore(container)
+    local left   = container:GetLeft()
+    local bottom = container:GetBottom()
+    if not left or not bottom then return end
+    local w, h = container:GetWidth(), container:GetHeight()
+    local pw, ph = UIParent:GetWidth(), UIParent:GetHeight()
+    local dRight = pw - (left + w)
+    local dTop   = ph - (bottom + h)
+
+    local hPart, vPart = "", ""
+    if left   < SNAP_DIST then hPart = "LEFT"
+    elseif dRight < SNAP_DIST then hPart = "RIGHT" end
+    if dTop    < SNAP_DIST then vPart = "TOP"
+    elseif bottom < SNAP_DIST then vPart = "BOTTOM" end
+
+    local anchor
+    if hPart == "" and vPart == "" then anchor = "CENTER"
+    elseif hPart == ""               then anchor = vPart
+    elseif vPart == ""               then anchor = hPart
+    else                                  anchor = vPart .. hPart end
+
+    local x, y = 0, 0
+    if hPart == "" then x = (left + w / 2) - pw / 2 end
+    if vPart == "" then y = (bottom + h / 2) - ph / 2 end
+
+    local db = TW:GetDB()
+    db.anchor  = anchor
+    db.anchorX = math.floor(x + 0.5)
+    db.anchorY = math.floor(y + 0.5)
+end
+
 local moverShown
 function TW:ToggleMover()
     if InCombatLockdown() then print("|cff00ff96TankWatch:|r combat lockdown"); return end
@@ -374,9 +535,7 @@ function TW:ToggleMover()
         m:SetScript("OnDragStart", function() container:SetMovable(true); container:StartMoving() end)
         m:SetScript("OnDragStop", function()
             container:StopMovingOrSizing()
-            local point, _, _, x, y = container:GetPoint()
-            local db = TW:GetDB()
-            db.anchor = point; db.anchorX = math.floor(x + 0.5); db.anchorY = math.floor(y + 0.5)
+            snapAndStore(container)
             ApplyLayout()
         end)
         container._mover = m
@@ -400,7 +559,50 @@ local function pickTestTarget(f)
     f._testHPTarget = t
 end
 
+-- Apply current settings to a single test frame: respects showName,
+-- showHealthText, showAuras, healthColorMode, healthStaticColor.
+local function applyTestFrameSettings(f, idx)
+    if not f or not f._testMode then return end
+    local db  = TW:GetDB()
+    local cls = TEST_CLASSES[idx] or "WARRIOR"
+    local c   = CLASS_COLORS[cls] or { r = 0.5, g = 0.5, b = 0.5 }
+
+    if f.nameText then
+        if db.showName then
+            f.nameText:SetText(TEST_NAMES[idx] or ("Tank" .. idx))
+            f.nameText:SetTextColor(1, 1, 1)
+            f.nameText:Show()
+        else
+            f.nameText:Hide()
+        end
+    end
+
+    if f.healthBar then
+        local r, g, b
+        if db.healthColorMode == "STATIC" then
+            local sc = db.healthStaticColor or { r = 0.2, g = 0.6, b = 0.2 }
+            r, g, b = sc.r, sc.g, sc.b
+        elseif db.healthColorMode == "REACTION" then
+            r, g, b = 0.2, 0.7, 0.2
+        else
+            r, g, b = c.r, c.g, c.b
+        end
+        f.healthBar:SetStatusBarColor(r, g, b)
+    end
+
+    if f.healthText then
+        if db.showHealthText then f.healthText:Show() else f.healthText:Hide() end
+    end
+
+    if TW.SetTestAuras then TW.SetTestAuras(f, idx) end
+end
+TW._applyTestFrameSettings = applyTestFrameSettings
+
 function TW:SetTestMode(count)
+    if InCombatLockdown() then
+        print("|cff00ff96TankWatch:|r " .. (TW.L and TW.L["combat lockdown"] or "combat lockdown"))
+        return
+    end
     count = math.max(0, math.min(MAX_TANKS, count or 0))
     for i = 1, MAX_TANKS do
         local f = TW.TankFrames[i]
@@ -410,24 +612,18 @@ function TW:SetTestMode(count)
             f._unit = nil
             f:SetAttribute("unit", nil)
             f:Show()
-            local cls = TEST_CLASSES[i] or "WARRIOR"
-            local c = CLASS_COLORS[cls] or { r=0.5, g=0.5, b=0.5 }
-            if f.nameText then
-                f.nameText:SetText(TEST_NAMES[i] or ("Tank" .. i))
-                f.nameText:SetTextColor(1, 1, 1)
-                f.nameText:Show()
-            end
             if f.healthBar then
                 f.healthBar:SetMinMaxValues(0, 1000)
-                f.healthBar:SetValue(math.random(400, 950))
-                f.healthBar:SetStatusBarColor(c.r, c.g, c.b)
+                local initial = math.random(400, 950)
+                f.healthBar:SetValue(initial)
+                -- Seed _testHP with the regular number directly. NEVER read
+                -- from f.healthBar:GetValue() — if this frame previously
+                -- displayed a live unit, the bar may still hold a secret
+                -- value left over from UnitHealth, which would taint us.
+                f._testHP       = initial
+                f._testHPTarget = initial
             end
-            if f.healthText then
-                local pct = math.floor(f.healthBar:GetValue() / 1000 * 100)
-                f.healthText:SetText(pct .. "%")
-                f.healthText:Show()
-            end
-            if TW.SetTestAuras then TW.SetTestAuras(f, i) end
+            applyTestFrameSettings(f, i)
         else
             f._testMode = false
             f:Hide()
@@ -453,7 +649,8 @@ function TW:SetTestMode(count)
                 local f = TW.TankFrames[i]
                 if f and f._testMode and f.healthBar then
                     anyTest = true
-                    f._testHP       = f._testHP       or f.healthBar:GetValue() or 700
+                    -- Use ONLY regular numbers; never re-read from healthBar:GetValue
+                    f._testHP       = f._testHP       or 700
                     f._testHPTarget = f._testHPTarget or f._testHP
                     if pickNew then pickTestTarget(f) end
 
@@ -484,34 +681,22 @@ end
 -- ============================================================
 -- RANGE FADE (poll every 0.4s — UnitInRange is the right API)
 -- ============================================================
-local function startRangeTicker()
+-- Range fade is DISABLED in WoW 12.0 / Midnight: UnitInRange returns a
+-- secret-tagged boolean. Comparing or branching on a secret-tagged value
+-- taints execution. Per the project no-secret-workarounds rule, the feature
+-- stays defined in defaults (so a future Blizzard fix re-enables it without
+-- a config wipe) but the ticker always sets alpha=1 on real units.
+function startRangeTicker()
     if TW._rangeTicker then return end
     local t = CreateFrame("Frame")
     t._acc = 0
     t:SetScript("OnUpdate", function(self, elapsed)
         self._acc = (self._acc or 0) + elapsed
-        if self._acc < 0.4 then return end
+        if self._acc < 1 then return end
         self._acc = 0
-        local db = TW:GetDB()
-        local enabled = db.rangeFadeEnabled
-        local fadeAlpha = db.rangeFadeAlpha or 0.4
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
-            if f and f:IsShown() then
-                if f._testMode then
-                    f:SetAlpha(1)
-                elseif not enabled then
-                    f:SetAlpha(1)
-                else
-                    local unit = f._unit
-                    local inRange = true
-                    if unit and unit ~= "player" then
-                        local ok, r = pcall(UnitInRange, unit)
-                        if ok and r == false then inRange = false end
-                    end
-                    f:SetAlpha(inRange and 1 or fadeAlpha)
-                end
-            end
+            if f and f:IsShown() then f:SetAlpha(1) end
         end
     end)
     TW._rangeTicker = t

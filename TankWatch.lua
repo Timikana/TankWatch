@@ -12,6 +12,12 @@ TW.TankContainer = nil
 TW.Defaults = {
     enabled = true,
 
+    -- Visibility scope:
+    --   "RAID"   → only show frames when in a raid (recommended for tank-watching)
+    --   "GROUP"  → show in raid or 5-man party
+    --   "ALWAYS" → also show solo (only useful for self when tank-spec)
+    visibilityMode = "RAID",
+
     -- Container
     anchor = "LEFT", anchorX = 50, anchorY = 0,
     frameWidth = 200, frameHeight = 36, frameSpacing = 4, frameScale = 1.0,
@@ -21,24 +27,47 @@ TW.Defaults = {
     healthTexture = "Blizzard Raid Bar",
     healthBackgroundAlpha = 0.35,
     healthColorMode = "CLASS", -- CLASS | REACTION | STATIC
+    healthStaticColor = { r = 0.2, g = 0.6, b = 0.2 },
 
     -- Name text
     showName = true, nameAnchor = "LEFT", nameX = 4, nameY = 0, nameMaxLength = 14,
-    showHealthText = true, healthTextAnchor = "RIGHT", healthTextX = -4, healthTextY = 0,
-    healthTextFormat = "PERCENT",
+    showHealthText = true, healthTextAnchor = "RIGHT", healthTextX = 0, healthTextY = 0,
+    healthTextFormat = "CURRENT",
 
     -- Auras (boss-cast debuffs with stacks emphasis)
     showAuras = true, aurasMaxCount = 5, aurasSize = 28, aurasSpacing = 2,
     aurasAnchor = "RIGHT", aurasX = 6, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
-    auraWhitelist = {},      -- [spellID] = true  → force-show even if not boss-cast
-    auraBlacklist = {},      -- [spellID] = true  → never show
+    auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
+    auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
+    auraBlacklist   = {},    -- [spellID] = true  → never show
+
+    -- Stack count: small, bottom-right corner by default
+    auraStackAnchor = "BOTTOMRIGHT",
+    auraStackX      = 3,
+    auraStackY      = -2,
+    auraStackSize   = 0, -- 0 = auto (~0.9x global font size)
+
+    -- Timer: HUGE, centered by default — the prominent live countdown
+    auraTimerShow   = true,
+    auraTimerAnchor = "CENTER",
+    auraTimerX      = 0,
+    auraTimerY      = 4,
+    auraTimerSize   = 0, -- 0 = auto (~1.6x global font size)
 
     -- Range fade
     rangeFadeEnabled = true,
     rangeFadeAlpha   = 0.4,
 
-    -- Force-include self if my spec is tank but the RL didn't assign me TANK
+    -- Tank detection mode
+    --   "ROLE"     → UnitGroupRolesAssigned == "TANK" (Blizzard auto-assigns this from spec)
+    --   "MAINTANK" → only units explicitly /maintank'd by the RL (raid only)
+    --   "BOTH"     → union of the two
+    tankDetection = "BOTH",
+
+    -- Force-include the player if their spec is tank (off by default — BOTH
+    -- detection above usually catches you). Toggle on if your raid leader
+    -- doesn't role-check and doesn't /maintank.
     forceIncludeSelf  = false,
     forceIncludeNames = {}, -- [normalizedName] = true → always treat them as a tank
 
@@ -93,7 +122,7 @@ local function ensureRoot()
         TankWatchDB.profiles["Default"] = {}
     end
     TankWatchDB.profileKeys = TankWatchDB.profileKeys or {}
-    TankWatchDB.minimap = TankWatchDB.minimap or { hide = true, angle = 200 }
+    TankWatchDB.minimap = TankWatchDB.minimap or { hide = false, angle = 200 }
     return TankWatchDB
 end
 
@@ -172,6 +201,8 @@ end
 
 -- ============================================================
 -- PROFILE SERIALIZATION (export / import)
+-- Format: "TW2!" .. base64(lua_table_literal)
+-- Legacy "TW1!" .. lua_table_literal is still accepted on import.
 -- ============================================================
 local function serialize(v)
     local tp = type(v)
@@ -193,19 +224,71 @@ local function serialize(v)
     return "nil"
 end
 
+local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local b64lookup = {}
+for i = 1, #b64chars do b64lookup[b64chars:sub(i, i)] = i - 1 end
+
+local function b64encode(data)
+    if not data or data == "" then return "" end
+    local out, len = {}, #data
+    for i = 1, len, 3 do
+        local b1 = data:byte(i)
+        local b2 = data:byte(i + 1)
+        local b3 = data:byte(i + 2)
+        local n  = b1 * 0x10000 + (b2 or 0) * 0x100 + (b3 or 0)
+        local c1 = math.floor(n / 0x40000) % 0x40
+        local c2 = math.floor(n / 0x1000)  % 0x40
+        local c3 = math.floor(n / 0x40)    % 0x40
+        local c4 = n % 0x40
+        out[#out + 1] = b64chars:sub(c1 + 1, c1 + 1)
+        out[#out + 1] = b64chars:sub(c2 + 1, c2 + 1)
+        out[#out + 1] = b2 and b64chars:sub(c3 + 1, c3 + 1) or "="
+        out[#out + 1] = b3 and b64chars:sub(c4 + 1, c4 + 1) or "="
+    end
+    return table.concat(out)
+end
+
+local function b64decode(data)
+    if not data or data == "" then return "" end
+    data = data:gsub("[^%w%+%/%=]", "")
+    local out, len = {}, #data
+    for i = 1, len, 4 do
+        local c1c = data:sub(i,     i    )
+        local c2c = data:sub(i + 1, i + 1)
+        local c3c = data:sub(i + 2, i + 2)
+        local c4c = data:sub(i + 3, i + 3)
+        local c1 = b64lookup[c1c] or 0
+        local c2 = b64lookup[c2c] or 0
+        local c3 = b64lookup[c3c] or 0
+        local c4 = b64lookup[c4c] or 0
+        local n  = c1 * 0x40000 + c2 * 0x1000 + c3 * 0x40 + c4
+        out[#out + 1] = string.char(math.floor(n / 0x10000) % 0x100)
+        if c3c ~= "=" then out[#out + 1] = string.char(math.floor(n / 0x100) % 0x100) end
+        if c4c ~= "=" then out[#out + 1] = string.char(n % 0x100) end
+    end
+    return table.concat(out)
+end
+
 function TW:ExportProfile(name)
     local root = ensureRoot()
     name = name or TW:GetActiveProfileName()
     local p = root.profiles[name]
     if not p then return nil end
-    return "TW1!" .. serialize(p)
+    return "TW2!" .. b64encode(serialize(p))
 end
 
 function TW:ImportProfile(name, str)
     if not str or str == "" then return false, "empty" end
     str = str:gsub("^%s+", ""):gsub("%s+$", "")
-    if not str:find("^TW1!") then return false, "bad header" end
-    local body = str:sub(5)
+    local body
+    if str:find("^TW2!") then
+        body = b64decode(str:sub(5))
+    elseif str:find("^TW1!") then
+        body = str:sub(5)
+    else
+        return false, "bad header"
+    end
+    if not body or body == "" then return false, "decode failed" end
     local f, err = (loadstring or load)("return " .. body, "TW-import", "t", {})
     if not f then return false, "parse: " .. tostring(err) end
     if setfenv then setfenv(f, {}) end
@@ -271,9 +354,15 @@ function TW:ApplyFonts()
             setF(f.nameText,   size, outline)
             setF(f.healthText, size, outline)
             if f._auras then
+                local strongOutline = (outline == "THICKOUTLINE") and "THICKOUTLINE" or "OUTLINE"
+                -- Timer is the prominent display (~1.6x), stack count secondary (~0.9x)
+                local timerSz = (db.auraTimerSize and db.auraTimerSize > 0)
+                    and db.auraTimerSize or math.floor(size * 1.6 + 0.5)
+                local stackSz = (db.auraStackSize and db.auraStackSize > 0)
+                    and db.auraStackSize or math.max(9, math.floor(size * 0.9 + 0.5))
                 for _, a in ipairs(f._auras) do
-                    setF(a.stacks, size + 2, outline ~= "" and outline or "OUTLINE")
-                    setF(a.timer,  size,     outline ~= "" and outline or "OUTLINE")
+                    setF(a.stacks, stackSz, strongOutline)
+                    setF(a.timer,  timerSz, strongOutline)
                 end
             end
         end
@@ -304,6 +393,10 @@ SlashCmdList["TANKWATCH"] = function(msg)
     elseif cmd == "reset" then
         TankWatchDB = nil
         ReloadUI()
+    elseif cmd == "debug" or cmd == "diag" then
+        if TW.PrintRosterDebug then TW:PrintRosterDebug() end
+    elseif cmd == "auradebug" or cmd == "auras" then
+        if TW.PrintAuraDebug then TW:PrintAuraDebug() end
     else
         local L = TW.L
         print("|cff00ff96TankWatch:|r " .. L["commands:"])
@@ -311,6 +404,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tw mover      - " .. L["toggle mover"])
         print("  /tw test N     - " .. L["simulate N tanks (0-8)"])
         print("  /tw reset      - " .. L["reset all settings + reload"])
+        print("  /tw debug      - " .. L["print roster role/maintank info"])
+        print("  /tw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
     end
 end
 

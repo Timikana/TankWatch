@@ -56,12 +56,25 @@ L["Only boss-cast HARMFUL auras are shown by default. Use the Filters tab to whi
     "Par défaut, seules les auras HARMFUL lancées par les boss sont affichées. Utilise l'onglet Filtres pour whitelister les debuffs M+ ou blacklister le bruit."
 
 -- Filters: tank inclusion section
+L["Tank detection"]                            = "Détection des tanks"
+L["Detection mode"]                            = "Mode de détection"
+L["Group role (auto-set from spec)"]           = "Rôle de groupe (auto via spé)"
+L["Only /maintank (raid)"]                     = "/maintank uniquement (raid)"
+L["Either role or /maintank"]                  = "Rôle ou /maintank"
 L["Force-include tanks"]                       = "Inclure de force comme tank"
 L["Always include me if my spec is tank"]      = "Toujours m'inclure si ma spé est tank"
+L["Always include these players (added on top of detected tanks):"] =
+    "Toujours inclure ces joueurs (en plus des tanks détectés) :"
 L["Always include these players (added on top of RL-assigned tanks):"] =
     "Toujours inclure ces joueurs (en plus des tanks assignés par le RL) :"
 L["Player name:"]                              = "Nom du joueur :"
 L["Debuff filters"]                            = "Filtres de debuffs"
+L["Filter mode"]                               = "Mode de filtre"
+L["All harmful debuffs"]                       = "Tous les debuffs nocifs"
+L["Boss-cast only"]                            = "Lancés par un boss uniquement"
+L["Whitelist only"]                            = "Whitelist uniquement"
+L["Whitelist always shows regardless of mode. Blacklist always hides."] =
+    "La whitelist affiche toujours peu importe le mode. La blacklist masque toujours."
 L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."] =
     "La whitelist force un debuff à s'afficher même s'il n'est pas lancé par un boss (ex : trash en M+). La blacklist masque un debuff même s'il est lancé par un boss."
 
@@ -73,6 +86,10 @@ L["Unlock / Lock Mover"] = "Déverrouiller / Verrouiller"
 L["Test:"]               = "Test :"
 L["Off"]                 = "Off"
 L["Enable"]              = "Activé"
+L["Show in"]               = "Afficher en"
+L["Raid only"]             = "Raid uniquement"
+L["Raid or 5-man"]         = "Raid ou groupe 5"
+L["Always (incl. solo)"]   = "Toujours (incl. solo)"
 L["Anchor"]              = "Ancrage"
 L["Grow Direction"]      = "Direction"
 L["Down"]                = "Bas"
@@ -101,6 +118,7 @@ L["Health Color"]        = "Couleur de la vie"
 L["Class color"]         = "Couleur de classe"
 L["Reaction (green)"]    = "Réaction (vert)"
 L["Custom static"]       = "Personnalisée"
+L["Custom color:"]       = "Couleur personnalisée :"
 L["HP background alpha"] = "Alpha fond vie"
 
 -- Text
@@ -136,13 +154,27 @@ L["Max Count"]   = "Nombre max"
 L["Size"]        = "Taille"
 L["Grow X"]      = "Sens horizontal"
 
+-- Aura text positioning (stack / timer)
+L["Stack count"]            = "Stacks"
+L["Stack anchor"]           = "Ancrage stacks"
+L["Stack size (0 = auto)"]  = "Taille stacks (0 = auto)"
+L["Stack offset X"]         = "Décalage X stacks"
+L["Stack offset Y"]         = "Décalage Y stacks"
+L["Timer"]                  = "Timer"
+L["Show timer"]             = "Afficher le timer"
+L["Timer anchor"]           = "Ancrage timer"
+L["Timer size (0 = auto)"]  = "Taille timer (0 = auto)"
+L["Timer offset X"]         = "Décalage X timer"
+L["Timer offset Y"]         = "Décalage Y timer"
+
 -- About
 L["See every tank in your group with their boss-cast debuffs and stack counts."] =
     "Voir tous les tanks de votre groupe avec leurs debuffs lancés par les boss et le nombre de stacks."
 L["Author:"]        = "Auteur :"
 L["Slash commands"] = "Commandes slash"
-L["GitHub:"]                                = "GitHub :"
-L["Click the field above and Ctrl+C to copy."] = "Clique le champ ci-dessus puis Ctrl+C pour copier."
+L["GitHub repo:"]   = "Dépôt GitHub :"
+L["Report a bug:"]  = "Signaler un problème :"
+L["Click a field above and Ctrl+C to copy."] = "Clique un champ ci-dessus puis Ctrl+C pour copier."
 L["open options"]   = "ouvrir les options"
 
 -- Blizzard settings
@@ -153,8 +185,14 @@ L["You can also use the slash command: /tw"] = "Vous pouvez aussi utiliser la co
 
 -- Slash help
 L["commands:"]                  = "commandes :"
+L["combat lockdown"]            = "verrou de combat actif"
 L["toggle mover"]               = "afficher / cacher le mover"
 L["simulate N tanks (0-8)"]     = "simuler N tanks (0 à 8)"
 L["reset all settings + reload"] = "réinitialiser et recharger l'UI"
+L["print roster role/maintank info"]        = "afficher le rôle et /maintank de chaque membre"
+L["roster diagnostic:"]                     = "diagnostic du roster :"
+L["print every HARMFUL aura on each tank unit"] = "lister tous les debuffs HARMFUL sur chaque tank"
+L["aura diagnostic:"]                       = "diagnostic des auras :"
+L["long alias for /tw"]                     = "alias long pour /tw"
 L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tw|r for options"] =
     "|cff00ff96TankWatch|r v%s chargé — tapez |cffffff00/tw|r pour les options"

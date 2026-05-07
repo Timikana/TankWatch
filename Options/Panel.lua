@@ -388,7 +388,13 @@ local function buildLayoutPage(page)
         if TW.UpdateMinimapButton then TW:UpdateMinimapButton() end
     end)
 
-    y = y - 26
+    y = y - 50
+    makeDropdown(page, L["Show in"], "visibilityMode", {
+        { text = L["Raid only"],           value = "RAID" },
+        { text = L["Raid or 5-man"],       value = "GROUP" },
+        { text = L["Always (incl. solo)"], value = "ALWAYS" },
+    }, 14, y, 220)
+    y = y - 50
     makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y)
     makeDropdown(page, L["Grow Direction"], "growDirection", {
         { text = L["Down"], value = "DOWN" }, { text = L["Up"], value = "UP" },
@@ -413,6 +419,63 @@ local function buildBarsPage(page)
         { text = L["Reaction (green)"], value = "REACTION" },
         { text = L["Custom static"],   value = "STATIC" },
     }, 14, y, 180)
+
+    -- Color picker swatch for STATIC mode (always visible — clicking only
+    -- has effect when color mode is STATIC; user gets visual indication too)
+    local swatchLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    swatchLabel:SetPoint("TOPLEFT", page, "TOPLEFT", 260, y)
+    swatchLabel:SetText(L["Custom color:"])
+
+    local swatch = CreateFrame("Button", "TWOpt_StaticColor", page, "BackdropTemplate")
+    swatch:SetSize(28, 22)
+    swatch:SetPoint("TOPLEFT", swatchLabel, "BOTTOMLEFT", 0, -2)
+    swatch:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
+    })
+    swatch:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+
+    local function refreshSwatch()
+        local c = TW:GetDB().healthStaticColor or { r = 0.2, g = 0.6, b = 0.2 }
+        swatch:SetBackdropColor(c.r, c.g, c.b, 1)
+    end
+
+    local function openPicker()
+        local c = TW:GetDB().healthStaticColor or { r = 0.2, g = 0.6, b = 0.2 }
+        local r0, g0, b0 = c.r, c.g, c.b
+        local function commit(r, g, b)
+            local db = TW:GetDB()
+            db.healthStaticColor = { r = r, g = g, b = b }
+            refreshSwatch()
+            refresh()
+        end
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            ColorPickerFrame:SetupColorPickerAndShow({
+                r = r0, g = g0, b = b0,
+                hasOpacity = false, opacity = 1,
+                swatchFunc = function()
+                    local r, g, b = ColorPickerFrame:GetColorRGB()
+                    commit(r, g, b)
+                end,
+                cancelFunc = function() commit(r0, g0, b0) end,
+            })
+        else
+            ColorPickerFrame.func = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB()
+                commit(r, g, b)
+            end
+            ColorPickerFrame.cancelFunc = function() commit(r0, g0, b0) end
+            ColorPickerFrame:SetColorRGB(r0, g0, b0)
+            ColorPickerFrame.hasOpacity = false
+            ColorPickerFrame:Hide(); ColorPickerFrame:Show()
+        end
+    end
+
+    swatch:SetScript("OnClick", openPicker)
+    swatch.dbKey = "healthStaticColor"
+    swatch.refresh = refreshSwatch
+    refreshSwatch()
+
     y = y - 50
     makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 14, y)
     y = y - 50
@@ -436,11 +499,12 @@ local function buildTextPage(page)
     makeSlider(page, L["HP text Offset X"], "healthTextX", -80, 80, 1, 14, y)
     makeSlider(page, L["HP text Offset Y"], "healthTextY", -80, 80, 1, 260, y)
     y = y - 50
+    -- Note: PERCENT / CURRENT_PERCENT removed in 12.0 — UnitHealth is
+    -- secret-tagged, so we can't compute cur/max for a percent. Only
+    -- absolute formats remain.
     makeDropdown(page, L["HP format"], "healthTextFormat", {
-        { text = L["Percent (50%)"],    value = "PERCENT" },
-        { text = L["Current (50M)"],     value = "CURRENT" },
-        { text = L["Current + Percent"], value = "CURRENT_PERCENT" },
-        { text = L["Current / Max"],     value = "CURRENT_MAX" },
+        { text = L["Current (50M)"],   value = "CURRENT" },
+        { text = L["Current / Max"],   value = "CURRENT_MAX" },
     }, 14, y, 200)
 
     y = y - 60
@@ -481,6 +545,29 @@ local function buildAurasPage(page)
     y = y - 50
     makeSlider(page, L["Offset X"], "aurasX", -200, 200, 1, 14, y)
     makeSlider(page, L["Offset Y"], "aurasY", -200, 200, 1, 260, y)
+
+    -- ── Stack count ──────────────────────────────────────────
+    y = y - 56
+    local sh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sh:SetPoint("TOPLEFT", 14, y); sh:SetText(L["Stack count"])
+    y = y - 22
+    makeDropdown(page, L["Stack anchor"], "auraStackAnchor", ANCHOR9(), 14, y)
+    makeSlider(page, L["Stack size (0 = auto)"], "auraStackSize", 0, 32, 1, 260, y, 200)
+    y = y - 50
+    makeSlider(page, L["Stack offset X"], "auraStackX", -30, 30, 1, 14, y)
+    makeSlider(page, L["Stack offset Y"], "auraStackY", -30, 30, 1, 260, y)
+
+    -- ── Timer ────────────────────────────────────────────────
+    y = y - 50
+    local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Timer"])
+    makeCheck(page, L["Show timer"], "auraTimerShow", 184, y - 2)
+    y = y - 22
+    makeDropdown(page, L["Timer anchor"], "auraTimerAnchor", ANCHOR9(), 14, y)
+    makeSlider(page, L["Timer size (0 = auto)"], "auraTimerSize", 0, 24, 1, 260, y, 200)
+    y = y - 50
+    makeSlider(page, L["Timer offset X"], "auraTimerX", -30, 30, 1, 14, y)
+    makeSlider(page, L["Timer offset Y"], "auraTimerY", -30, 30, 1, 260, y)
 end
 
 -- ============================================================
@@ -687,28 +774,42 @@ end
 local function buildFiltersPage(page)
     local y = -10
 
-    -- ── Tank inclusion section ───────────────────────────────
+    -- ── Tank detection / inclusion ───────────────────────────
     local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Force-include tanks"])
+    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Tank detection"])
     y = y - 18
+
+    makeDropdown(page, L["Detection mode"], "tankDetection", {
+        { text = L["Group role (auto-set from spec)"], value = "ROLE" },
+        { text = L["Only /maintank (raid)"],           value = "MAINTANK" },
+        { text = L["Either role or /maintank"],        value = "BOTH" },
+    }, 14, y, 260)
+    y = y - 50
 
     makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y)
     y = y - 28
 
     local nl = makeNameList(page, "forceIncludeNames",
-        L["Always include these players (added on top of RL-assigned tanks):"],
-        14, y, 360, 70)
-    y = y - 16 - 70 - 30
+        L["Always include these players (added on top of detected tanks):"],
+        14, y, 360, 60)
+    y = y - 16 - 60 - 30
 
     -- ── Debuff filters section ───────────────────────────────
     local dh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     dh:SetPoint("TOPLEFT", 14, y); dh:SetText(L["Debuff filters"])
     y = y - 18
 
+    makeDropdown(page, L["Filter mode"], "auraFilterMode", {
+        { text = L["All harmful debuffs"],  value = "ALL" },
+        { text = L["Boss-cast only"],       value = "BOSS" },
+        { text = L["Whitelist only"],       value = "WHITELIST" },
+    }, 14, y, 220)
+    y = y - 50
+
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 14, y)
     note:SetWidth(520); note:SetJustifyH("LEFT")
-    note:SetText(L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."])
+    note:SetText(L["Whitelist always shows regardless of mode. Blacklist always hides."])
     y = y - 32
 
     local listH = 170
@@ -952,28 +1053,34 @@ local function buildAboutPage(page)
     byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -10)
     byLabel:SetText(L["Author:"] .. " |cffffffff" .. author .. "|r")
 
-    -- GitHub link (selectable for copy)
-    local ghLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    ghLabel:SetPoint("TOPLEFT", logo, "BOTTOMLEFT", 0, -16)
-    ghLabel:SetText(L["GitHub:"])
+    -- Links (selectable for copy)
+    local function makeLink(label, url, anchorTo, dy)
+        local lbl = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, dy or -16)
+        lbl:SetText(label)
+        lbl:SetWidth(150); lbl:SetJustifyH("LEFT")
+        local edit = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+        edit:SetSize(330, 22)
+        edit:SetPoint("LEFT", lbl, "RIGHT", 8, 0)
+        edit:SetAutoFocus(false)
+        edit:SetText(url)
+        edit:SetCursorPosition(0)
+        edit:SetScript("OnEscapePressed", edit.ClearFocus)
+        edit:SetScript("OnEnterPressed",  edit.ClearFocus)
+        edit:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+        return lbl
+    end
 
-    local ghEdit = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
-    ghEdit:SetSize(360, 22)
-    ghEdit:SetPoint("LEFT", ghLabel, "RIGHT", 8, 0)
-    ghEdit:SetAutoFocus(false)
-    ghEdit:SetText("https://github.com/Timikana/TankWatch")
-    ghEdit:SetCursorPosition(0)
-    ghEdit:SetScript("OnEscapePressed", ghEdit.ClearFocus)
-    ghEdit:SetScript("OnEnterPressed",  ghEdit.ClearFocus)
-    ghEdit:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+    local ghLabel    = makeLink(L["GitHub repo:"],  "https://github.com/Timikana/TankWatch",        logo,   -16)
+    local issueLabel = makeLink(L["Report a bug:"], "https://github.com/Timikana/TankWatch/issues", ghLabel, -8)
 
     local copyHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    copyHint:SetPoint("TOPLEFT", ghLabel, "BOTTOMLEFT", 0, -16)
-    copyHint:SetText(L["Click the field above and Ctrl+C to copy."])
+    copyHint:SetPoint("TOPLEFT", issueLabel, "BOTTOMLEFT", 0, -10)
+    copyHint:SetText(L["Click a field above and Ctrl+C to copy."])
 
     -- Slash commands
     local cmdHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOPLEFT", 14, -180)
+    cmdHeader:SetPoint("TOPLEFT", 14, -200)
     cmdHeader:SetText(L["Slash commands"])
 
     local cmds = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -983,7 +1090,10 @@ local function buildAboutPage(page)
         "|cffffff00/tw|r — " .. L["open options"] .. "\n" ..
         "|cffffff00/tw mover|r — " .. L["toggle mover"] .. "\n" ..
         "|cffffff00/tw test N|r — " .. L["simulate N tanks (0-8)"] .. "\n" ..
-        "|cffffff00/tw reset|r — " .. L["reset all settings + reload"]
+        "|cffffff00/tw reset|r — " .. L["reset all settings + reload"] .. "\n" ..
+        "|cffffff00/tw debug|r — " .. L["print roster role/maintank info"] .. "\n" ..
+        "|cffffff00/tw auradebug|r — " .. L["print every HARMFUL aura on each tank unit"] .. "\n" ..
+        "|cffffff00/tankwatch|r — " .. L["long alias for /tw"]
     )
 end
 
@@ -992,7 +1102,7 @@ end
 -- ============================================================
 local function build()
     panel = CreateFrame("Frame", "TankWatchOptions", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(560, 540)
+    panel:SetSize(560, 620)
     panel:SetPoint("CENTER")
     panel:SetMovable(true); panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
