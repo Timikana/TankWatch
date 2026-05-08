@@ -211,6 +211,19 @@ L["Dimensions"] = "Dimensions"
 L["Textures"]   = "Textures"
 L["Background"] = "Fond"
 L["Range Fade"] = "Estompage hors de portée"
+L["Absorb shield"]      = "Bouclier d'absorption"
+L["Show absorb shield"] = "Afficher le bouclier d'absorption"
+L["Absorb color"]       = "Couleur du bouclier"
+L["Overlay a translucent shield bar showing the tank's current absorb amount."] =
+    "Affiche une barre translucide de bouclier représentant le montant d'absorption actuel du tank."
+L["Color and alpha of the absorb shield overlay."] =
+    "Couleur et transparence du bouclier d'absorption."
+L["Absorb texture"] = "Texture du bouclier"
+L["Status bar texture used for the absorb shield overlay."] =
+    "Texture de la barre utilisée pour le bouclier d'absorption."
+L["Absorb side"] = "Côté du bouclier"
+L["Which side of the bar the shield grows from."] =
+    "Côté de la barre où le bouclier se remplit (gauche ou droite)."
 L["Name"]       = "Nom"
 L["Health Text"] = "Texte de vie"
 L["Display"]    = "Affichage"

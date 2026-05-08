@@ -4,6 +4,7 @@ local CreateFrame = CreateFrame
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitName, UnitClass, UnitExists = UnitName, UnitClass, UnitExists
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local IsInRaid, IsInGroup = IsInRaid, IsInGroup
 local GetNumGroupMembers = GetNumGroupMembers
 local format = string.format
@@ -281,6 +282,19 @@ local function CreateTankFrame(index)
     hpBg:SetColorTexture(0.1, 0.1, 0.1, 0.5)
     hp.bg = hpBg
 
+    -- Absorb shield overlay (DandersFrames-style). Same area as the health bar;
+    -- StatusBar:SetValue accepts secret values, so we can pass UnitGetTotalAbsorbs
+    -- directly. SetMinMaxValues(0, UnitHealthMax) gives a relative size.
+    local abs = CreateFrame("StatusBar", nil, hp)
+    abs:SetAllPoints(hp)
+    abs:SetStatusBarTexture("Interface\\RaidFrame\\Shield-Fill")
+    abs:SetMinMaxValues(0, 1)
+    abs:SetValue(0)
+    -- SetReverseFill is toggled per-frame in ApplyLayout based on db.absorbBarSide
+    abs:SetFrameLevel(hp:GetFrameLevel() + 4)
+    abs:Hide()
+    f.absorbBar = abs
+
     -- Name + HP text
     local nameText = hp:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameText:SetTextColor(1, 1, 1)
@@ -379,6 +393,16 @@ local function ApplyLayout()
             end
         end
 
+        if f.absorbBar then
+            local absTex = db.absorbBarTexture
+            if absTex and absTex ~= "" then
+                f.absorbBar:SetStatusBarTexture(TW:ResolveTexture(absTex))
+            else
+                f.absorbBar:SetStatusBarTexture([[Interface\RaidFrame\Shield-Fill]])
+            end
+            f.absorbBar:SetReverseFill(db.absorbBarSide ~= "LEFT")
+        end
+
         if f.nameText then
             f.nameText:ClearAllPoints()
             local a = db.nameAnchor
@@ -452,36 +476,79 @@ local function UpdateFrame(f)
         end
     end
 
-    -- HP text. Restructured so we never compare a secret to nil.
+    -- HP text. Only absolute formats are supported in 12.0 — UnitHealth is
+    -- secret-tagged and AbbreviateNumbers can return secret strings, which
+    -- prevents reliable concatenation with regular characters.
     if f.healthText then
         if not db.showHealthText then
             f.healthText:Hide()
-        elseif isSecret(max) or not max or max <= 0 then
-            f.healthText:Hide()
         else
-            local fmt = db.healthTextFormat
-            if fmt == "PERCENT" or fmt == "CURRENT_PERCENT" or not fmt then
+            local fmt = db.healthTextFormat or "CURRENT"
+            if fmt == "PERCENT" or fmt == "CURRENT_PERCENT" then
                 fmt = "CURRENT"
                 db.healthTextFormat = fmt
             end
-            if isSecret(cur) then
-                local curStr
-                if AbbreviateNumbers then
-                    pcall(function() curStr = AbbreviateNumbers(cur) end)
-                end
-                if not curStr then curStr = "?" end
-                if fmt == "CURRENT_MAX" then
-                    local maxStr = AbbreviateNumbers and AbbreviateNumbers(max) or tostring(max)
-                    f.healthText:SetText(curStr .. " / " .. maxStr)
-                else
-                    f.healthText:SetText(curStr)
-                end
+
+            -- Current
+            local curStr
+            if isSecret(cur) and AbbreviateNumbers then
+                pcall(function() curStr = AbbreviateNumbers(cur) end)
+            elseif cur ~= nil and AbbreviateNumbers then
+                curStr = AbbreviateNumbers(cur)
+            elseif cur ~= nil then
+                curStr = tostring(cur)
+            end
+
+            -- Max (only if not secret)
+            local maxStr
+            if not isSecret(max) and max and max > 0 and AbbreviateNumbers then
+                maxStr = AbbreviateNumbers(max)
+            end
+
+            local text
+            if isSecret(curStr) then
+                text = curStr
+            elseif fmt == "CURRENT_MAX" and curStr and maxStr then
+                text = curStr .. " / " .. maxStr
+            else
+                text = curStr
+            end
+
+            if isSecret(text) then
+                f.healthText:SetText(text)
                 f.healthText:Show()
-            elseif cur == nil then
+            elseif text == nil or text == "" then
                 f.healthText:Hide()
             else
-                f.healthText:SetText(formatHP(cur, max, fmt))
+                f.healthText:SetText(text)
                 f.healthText:Show()
+            end
+        end
+    end
+
+    -- Absorb shield overlay
+    if f.absorbBar then
+        if not db.showAbsorbBar then
+            f.absorbBar:Hide()
+        elseif isSecret(max) or not max or max <= 0 then
+            f.absorbBar:Hide()
+        else
+            local abs
+            pcall(function() abs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) end)
+            -- Detect "no absorb" without comparing a secret value.
+            local hasAbs
+            if isSecret(abs) then hasAbs = true
+            elseif abs and abs > 0 then hasAbs = true
+            else hasAbs = false end
+
+            if not hasAbs then
+                f.absorbBar:Hide()
+            else
+                f.absorbBar:SetMinMaxValues(0, max)
+                pcall(f.absorbBar.SetValue, f.absorbBar, abs or 0)
+                local c = db.absorbBarColor or { r = 1, g = 1, b = 1, a = 0.55 }
+                f.absorbBar:SetStatusBarColor(c.r, c.g, c.b, c.a or 0.55)
+                f.absorbBar:Show()
             end
         end
     end
@@ -595,6 +662,12 @@ function TW:ToggleMover()
         m:EnableMouse(true)
         m:SetMovable(true)
         m:RegisterForDrag("LeftButton")
+        -- Float above tank frames so the player can drag even when a real
+        -- unit is anchored to a tank slot (the SecureUnitButton would
+        -- otherwise eat clicks). HIGH strata sits above the default MEDIUM
+        -- of unit frames.
+        m:SetFrameStrata("HIGH")
+        m:SetFrameLevel(100)
         local fs = m:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         fs:SetPoint("CENTER")
         fs:SetText("TankWatch  (RMB: lock)")
@@ -662,6 +735,19 @@ local function applyTestFrameSettings(f, idx)
 
     if f.healthText then
         if db.showHealthText then f.healthText:Show() else f.healthText:Hide() end
+    end
+
+    -- Fake absorb bar in test mode: idx 1, 3, 5, 7 get a visible shield (~25% of max)
+    if f.absorbBar then
+        if db.showAbsorbBar and (idx % 2 == 1) then
+            f.absorbBar:SetMinMaxValues(0, 1000)
+            f.absorbBar:SetValue(250)
+            local cc = db.absorbBarColor or { r = 1, g = 1, b = 1, a = 0.55 }
+            f.absorbBar:SetStatusBarColor(cc.r, cc.g, cc.b, cc.a or 0.55)
+            f.absorbBar:Show()
+        else
+            f.absorbBar:Hide()
+        end
     end
 
     if TW.SetTestAuras then TW.SetTestAuras(f, idx) end
@@ -784,6 +870,7 @@ ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("UNIT_HEALTH")
 ev:RegisterEvent("UNIT_MAXHEALTH")
 ev:RegisterEvent("UNIT_AURA")
+ev:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
 ev:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
@@ -791,7 +878,8 @@ ev:SetScript("OnEvent", function(self, event, unit)
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         TW:RefreshTanks()
-    elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA" then
+    elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
+        or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
             if f and f._unit == unit then UpdateFrame(f); break end

@@ -708,6 +708,23 @@ local function buildBarsPage(page)
     addTooltip(markAsNew(makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180), "v1.0.4_bgTextureDD"),
         L["Texture used for the health bar background when the option above is enabled."])
 
+    -- ============ ABSORB SHIELD ============
+    y = y - 60
+    makeSection(page, L["Absorb shield"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show absorb shield"], "showAbsorbBar", 14, y), "v1.2_absorbBar"),
+        L["Overlay a translucent shield bar showing the tank's current absorb amount."])
+    addTooltip(markAsNew(makeColorPicker(page, L["Absorb color"], "absorbBarColor", 280, y), "v1.2_absorbBarColor"),
+        L["Color and alpha of the absorb shield overlay."])
+    y = y - 56
+    addTooltip(markAsNew(makeMediaDropdown(page, L["Absorb texture"], "absorbBarTexture", "statusbar", 14, y, 180), "v1.2_absorbBarTexture"),
+        L["Status bar texture used for the absorb shield overlay."])
+    y = y - 56
+    addTooltip(markAsNew(makeDropdown(page, L["Absorb side"], "absorbBarSide", {
+        { text = L["Right"], value = "RIGHT" },
+        { text = L["Left"],  value = "LEFT" },
+    }, 14, y, 160), "v1.2_absorbBarSide"),
+        L["Which side of the bar the shield grows from."])
+
     -- ============ RANGE FADE ============
     y = y - 60
     makeSection(page, L["Range Fade"], 14, y); y = y - 24
@@ -720,7 +737,8 @@ end
 local function buildTextPage(page)
     local y = -8
 
-    -- HP formats — PERCENT removed (UnitHealth is secret in 12.0, can't compute cur/max)
+    -- PERCENT removed: UnitHealthPercent + ScaleTo100 didn't behave reliably
+    -- on group members in 12.0. Only absolute formats remain.
     local FORMATS = {
         { text = L["Current (50M)"],   value = "CURRENT" },
         { text = L["Current / Max"],   value = "CURRENT_MAX" },

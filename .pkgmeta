@@ -3,6 +3,16 @@ package-as: TankWatch
 curse-project-id: 1536671
 wago-project-id: O67DEYK3
 
+externals:
+  Libs/LibStub: https://repos.curseforge.com/wow/libstub/trunk
+  Libs/CallbackHandler-1.0:
+    url: https://repos.curseforge.com/wow/callbackhandler/trunk
+    tag: latest
+  Libs/LibSharedMedia-3.0:
+    url: https://repos.curseforge.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
+    tag: latest
+  Libs/LibDataBroker-1.1: https://github.com/tekkub/libdatabroker-1-1.git
+
 ignore:
   - .gitignore
   - .github

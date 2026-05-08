@@ -33,6 +33,13 @@ TW.Defaults = {
     healthColorMode = "CLASS", -- CLASS | REACTION | STATIC
     healthStaticColor = { r = 0.2, g = 0.6, b = 0.2 },
 
+    -- Absorb shield overlay (DandersFrames-style: a 2nd StatusBar over the
+    -- health bar. SetValue accepts secret values.)
+    showAbsorbBar    = true,
+    absorbBarColor   = { r = 0.53, g = 0.81, b = 0.92, a = 0.65 },  -- sky blue (#87CEEB)
+    absorbBarTexture = "Blizzard Shield",  -- LSM name; falls back to Shield-Fill
+    absorbBarSide    = "RIGHT",  -- LEFT | RIGHT (which side the shield grows from)
+
     -- Name text
     showName = true, nameAnchor = "LEFT", nameX = 4, nameY = 0, nameMaxLength = 14,
     showHealthText = true, healthTextAnchor = "RIGHT", healthTextX = 0, healthTextY = 0,
@@ -331,6 +338,8 @@ do
     local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
     if LSM then
         LSM:Register("statusbar", "Blizzard Modern", [[Interface\TargetingFrame\UI-TargetingFrame-BarFill]])
+        LSM:Register("statusbar", "Blizzard Shield", [[Interface\RaidFrame\Shield-Fill]])
+        LSM:Register("statusbar", "Blizzard Shield Overlay", [[Interface\RaidFrame\Shield-Overlay]])
     end
 end
 
