@@ -8,94 +8,111 @@ local panel
 local refresh = function() if TW.RefreshAll then TW:RefreshAll() end end
 
 -- ============================================================
--- "NEW" badge helper — attaches a small pulsing badge to a widget.
--- Disappears on first OnEnter / OnClick / OnMouseUp.
+-- "NEW" BADGE
 -- ============================================================
 local function markAsNew(widget, key)
-    if not widget or not key then return end
-    if not TW.IsFeatureNew or not TW:IsFeatureNew(key) then return end
+    if not widget or not key then return widget end
+    if not TW.IsFeatureNew or not TW:IsFeatureNew(key) then return widget end
 
-    -- Container frame so we can attach an animation group and host the
-    -- glow + text together.
-    local f = CreateFrame("Frame", nil, widget, "BackdropTemplate")
-    f:SetSize(38, 18)
-    f:SetPoint("LEFT", widget, "RIGHT", 6, 0)
-    f:SetFrameLevel((widget:GetFrameLevel() or 1) + 5)
-    f:SetBackdrop({
+    local badge = CreateFrame("Frame", nil, widget, "BackdropTemplate")
+    badge:SetSize(38, 16)
+    badge:SetPoint("BOTTOMLEFT", widget, "TOPLEFT", -3, 1)
+    badge:SetFrameLevel((widget.GetFrameLevel and widget:GetFrameLevel() or 1) + 5)
+    badge:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    f:SetBackdropColor(0.95, 0.45, 0.05, 0.85)        -- orange fill
-    f:SetBackdropBorderColor(1, 0.85, 0.2, 1)         -- gold border
+    badge:SetBackdropColor(0.95, 0.45, 0.05, 0.85)        -- orange fill
+    badge:SetBackdropBorderColor(1, 0.85, 0.2, 1)         -- gold border
 
-    local badge = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    badge:SetPoint("CENTER")
-    badge:SetTextColor(1, 1, 1)
-    badge:SetText("NEW")
+    local glow = badge:CreateTexture(nil, "BACKGROUND")
+    glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    glow:SetBlendMode("ADD")
+    glow:SetVertexColor(1, 0.85, 0, 0.9)
+    glow:SetPoint("CENTER", badge, "CENTER", 0, 0)
+    glow:SetSize(58, 36)
 
-    -- Pulse: looping fade-out + fade-in on the whole frame
-    local ag = f:CreateAnimationGroup()
-    ag:SetLooping("REPEAT")
-    local a1 = ag:CreateAnimation("Alpha")
-    a1:SetFromAlpha(1); a1:SetToAlpha(0.35); a1:SetDuration(0.6); a1:SetOrder(1)
-    local a2 = ag:CreateAnimation("Alpha")
-    a2:SetFromAlpha(0.35); a2:SetToAlpha(1); a2:SetDuration(0.6); a2:SetOrder(2)
+    local text = badge:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    text:SetText("NEW")
+    text:SetTextColor(1, 1, 1)
+    text:SetPoint("CENTER")
+    text:SetShadowColor(0, 0, 0, 1)
+    text:SetShadowOffset(1, -1)
+
+    local ag = glow:CreateAnimationGroup()
+    ag:SetLooping("BOUNCE")
+    local a = ag:CreateAnimation("Alpha")
+    a:SetFromAlpha(1); a:SetToAlpha(0.3); a:SetDuration(0.8); a:SetSmoothing("IN_OUT")
     ag:Play()
 
     local dismissed = false
-    local function dismiss()
+    local function clear()
         if dismissed then return end
         dismissed = true
         if TW.MarkFeatureSeen then TW:MarkFeatureSeen(key) end
-        ag:Stop()
-        f:Hide()
+        if ag then ag:Stop() end
+        badge:Hide()
     end
-    pcall(function() widget:HookScript("OnEnter",   dismiss) end)
-    pcall(function() widget:HookScript("OnClick",   dismiss) end)
-    pcall(function() widget:HookScript("OnMouseUp", dismiss) end)
+
+    pcall(function() widget:HookScript("OnEnter", clear) end)
+    local typ = widget.GetObjectType and widget:GetObjectType() or ""
+    if typ == "CheckButton" or typ == "Button" then
+        pcall(function() widget:HookScript("OnClick", clear) end)
+    end
+    pcall(function() widget:HookScript("OnMouseUp", clear) end)
+    return widget
 end
 
 -- ============================================================
--- WIDGET FACTORIES (same patterns as BossWatch)
+-- WIDGET FACTORIES
 -- ============================================================
 
 local function makeSlider(parent, label, key, minV, maxV, step, x, y, width)
-    local sl = CreateFrame("Slider", "TWOpt_"..key, parent, "OptionsSliderTemplate")
+    local sl = CreateFrame("Frame", "TWOpt_"..key, parent, "MinimalSliderWithSteppersTemplate")
     sl:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    sl:SetWidth(width or 180)
-    sl:SetMinMaxValues(minV, maxV)
-    sl:SetValueStep(step)
-    sl:SetObeyStepOnDrag(true)
-    _G[sl:GetName().."Low"]:SetText(""); _G[sl:GetName().."High"]:SetText("")
-    _G[sl:GetName().."Text"]:SetText(label)
-
-    local edit = CreateFrame("EditBox", nil, sl, "InputBoxTemplate")
-    edit:SetSize(46, 18)
-    edit:SetPoint("LEFT", sl, "RIGHT", 8, 0)
-    edit:SetAutoFocus(false)
-    edit:SetFontObject("GameFontHighlightSmall")
-    sl.edit = edit
+    sl:SetWidth(width or 200)
     sl.dbKey = key
 
-    sl:SetScript("OnValueChanged", function(self, val)
-        if step < 1 then val = math.floor(val * 100 + 0.5) / 100
-        else val = math.floor(val + 0.5) end
-        TW:GetDB()[key] = val
-        edit:SetText(tostring(val))
+    local function fmt(v)
+        if step < 1 then return string.format("%.2f", v) end
+        return tostring(math.floor(v + 0.5))
+    end
+
+    local formatters = {
+        [MinimalSliderWithSteppersMixin.Label.Min] = function() return fmt(minV) end,
+        [MinimalSliderWithSteppersMixin.Label.Max] = function() return fmt(maxV) end,
+        [MinimalSliderWithSteppersMixin.Label.Top] = function(v) return label .. ": " .. fmt(v) end,
+    }
+
+    local numSteps = math.max(1, math.floor((maxV - minV) / step + 0.5))
+    local function readDB()
+        local v = TW:GetDB()[key]
+        if type(v) ~= "number" then v = minV end
+        if v < minV then v = minV elseif v > maxV then v = maxV end
+        return v
+    end
+
+    sl:Init(readDB(), minV, maxV, numSteps, formatters)
+
+    local event = (MinimalSliderWithSteppersMixin.Event
+        and MinimalSliderWithSteppersMixin.Event.OnValueChanged) or "OnValueChanged"
+    sl:RegisterCallback(event, function(_, value)
+        if step < 1 then value = math.floor(value * 100 + 0.5) / 100
+        else value = math.floor(value + 0.5) end
+        TW:GetDB()[key] = value
         refresh()
-    end)
-    edit:SetScript("OnEnterPressed", function(self)
-        local v = tonumber(self:GetText())
-        if v then sl:SetValue(v) end
-        self:ClearFocus()
-    end)
+    end, sl)
+
+    sl.refresh = function() sl:Init(readDB(), minV, maxV, numSteps, formatters) end
     return sl
 end
 
 local function makeCheck(parent, label, key, x, y)
-    local cb = CreateFrame("CheckButton", "TWOpt_"..key, parent, "InterfaceOptionsCheckButtonTemplate")
+    local cb = CreateFrame("CheckButton", "TWOpt_"..key, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    cb:SetSize(24, 24)
+    cb.Text:SetFontObject("GameFontHighlight")
     cb.Text:SetText(label)
     cb.dbKey = key
     cb:SetScript("OnClick", function(self)
@@ -110,39 +127,26 @@ local function makeDropdown(parent, label, key, options, x, y, width)
     labelFS:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     labelFS:SetText(label)
 
-    local dd = CreateFrame("Frame", "TWOpt_DD_"..key, parent, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", -18, -2)
-    UIDropDownMenu_SetWidth(dd, width or 130)
+    local dd = CreateFrame("DropdownButton", "TWOpt_DD_"..key, parent, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", 0, -2)
+    dd:SetWidth(width or 160)
     dd.dbKey = key
+    dd._options = options
 
-    local function setSelected(val, text)
-        TW:GetDB()[key] = val
-        UIDropDownMenu_SetText(dd, text)
-        refresh()
-    end
-
-    UIDropDownMenu_Initialize(dd, function()
+    dd:SetupMenu(function(_, rootDescription)
         for _, opt in ipairs(options) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = opt.text
-            info.value = opt.value
-            info.func = function() setSelected(opt.value, opt.text) end
-            info.checked = (TW:GetDB()[key] == opt.value)
-            UIDropDownMenu_AddButton(info)
+            rootDescription:CreateRadio(opt.text,
+                function() return TW:GetDB()[key] == opt.value end,
+                function()
+                    TW:GetDB()[key] = opt.value
+                    refresh()
+                end)
         end
     end)
-    dd.refresh = function()
-        local cur = TW:GetDB()[key]
-        for _, opt in ipairs(options) do
-            if opt.value == cur then UIDropDownMenu_SetText(dd, opt.text); return end
-        end
-    end
+    dd.refresh = function() dd:GenerateMenu() end
     return dd
 end
 
--- ============================================================
--- CUSTOM MEDIA DROPDOWN (scrollable popup with previews)
--- ============================================================
 local POPUP_ITEM_H = 22
 local POPUP_VISIBLE = 12
 
@@ -154,15 +158,17 @@ local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
     labelFS:SetText(label)
 
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    btn:SetSize(width, 22)
+    btn:SetSize(width, 24)
     btn:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", 0, -4)
     btn:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    btn:SetBackdropColor(0.08, 0.08, 0.10, 1)
-    btn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+    btn:SetBackdropColor(0.06, 0.06, 0.08, 1)
+    btn:SetBackdropBorderColor(0.35, 0.35, 0.40, 1)
+    btn:HookScript("OnEnter", function(self) self:SetBackdropBorderColor(1, 0.82, 0, 1) end)
+    btn:HookScript("OnLeave", function(self) self:SetBackdropBorderColor(0.35, 0.35, 0.40, 1) end)
     btn.dbKey = key
 
     local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -175,7 +181,6 @@ local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
     arrow:SetSize(14, 14)
     arrow:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
 
-    -- External preview
     local previewBg = parent:CreateTexture(nil, "BACKGROUND")
     previewBg:SetPoint("LEFT", btn, "RIGHT", 12, 0)
     previewBg:SetSize(width + 30, 18)
@@ -214,19 +219,18 @@ local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
         return { "Blizzard" }
     end
 
-    -- Scrollable popup
     local popupW = width + 40
     local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
     popup:SetSize(popupW, POPUP_ITEM_H * POPUP_VISIBLE + 12)
     popup:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 14,
-        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets   = { left = 1, right = 1, top = 1, bottom = 1 },
     })
-    popup:SetBackdropColor(0.04, 0.04, 0.06, 0.97)
-    popup:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    popup:SetBackdropColor(0.03, 0.03, 0.05, 0.98)
+    popup:SetBackdropBorderColor(0.4, 0.4, 0.45, 1)
     popup:Hide()
     popup:EnableMouse(true)
 
@@ -336,6 +340,151 @@ local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
     return btn
 end
 
+local function makeColorPicker(parent, label, dbKey, x, y)
+    local lab
+    if label and label ~= "" then
+        lab = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lab:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        lab:SetText(label)
+    end
+
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(28, 22)
+    if lab then
+        btn:SetPoint("TOPLEFT", lab, "BOTTOMLEFT", 0, -2)
+    else
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    end
+    btn:RegisterForClicks("AnyUp")
+
+    local border = btn:CreateTexture(nil, "BACKGROUND")
+    border:SetAllPoints(btn)
+    border:SetColorTexture(0.55, 0.45, 0.10, 1)
+
+    local swatch = btn:CreateTexture(nil, "ARTWORK")
+    swatch:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+    swatch:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+    swatch:SetColorTexture(1, 1, 1, 1)
+
+    btn:SetScript("OnEnter", function(self)
+        border:SetColorTexture(1, 0.82, 0, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["Click to choose a color"], 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function(self)
+        border:SetColorTexture(0.55, 0.45, 0.10, 1)
+        GameTooltip:Hide()
+    end)
+
+    local function getColor()
+        return TW:GetDB()[dbKey] or { r = 1, g = 1, b = 1, a = 1 }
+    end
+    local function refreshSwatch()
+        local c = getColor()
+        swatch:SetVertexColor(c.r or 1, c.g or 1, c.b or 1, c.a or 1)
+    end
+    btn.dbKey = dbKey
+    btn.refresh = refreshSwatch
+    refreshSwatch()
+
+    btn:SetScript("OnClick", function()
+        local c = getColor()
+        local function setColor(r, g, b, a)
+            TW:GetDB()[dbKey] = { r = r, g = g, b = b, a = a or 1 }
+            refreshSwatch()
+            refresh()
+        end
+        local function readAlpha()
+            if ColorPickerFrame.GetColorAlpha then
+                return ColorPickerFrame:GetColorAlpha() or 1
+            elseif OpacitySliderFrame and OpacitySliderFrame:IsShown() then
+                return OpacitySliderFrame:GetValue()
+            end
+            return 1
+        end
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            ColorPickerFrame:SetupColorPickerAndShow({
+                hasOpacity = true,
+                opacity = c.a or 1,
+                r = c.r, g = c.g, b = c.b,
+                swatchFunc = function()
+                    local r, g, b = ColorPickerFrame:GetColorRGB()
+                    setColor(r, g, b, readAlpha())
+                end,
+                opacityFunc = function()
+                    local r, g, b = ColorPickerFrame:GetColorRGB()
+                    setColor(r, g, b, readAlpha())
+                end,
+                cancelFunc = function(prev)
+                    setColor(prev.r, prev.g, prev.b, prev.opacity or 1)
+                end,
+            })
+        else
+            ColorPickerFrame:SetColorRGB(c.r, c.g, c.b)
+            ColorPickerFrame.hasOpacity = true
+            ColorPickerFrame.opacity = c.a or 1
+            ColorPickerFrame.previousValues = { r = c.r, g = c.g, b = c.b, opacity = c.a or 1 }
+            ColorPickerFrame.func = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB()
+                setColor(r, g, b, ColorPickerFrame.opacity or 1)
+            end
+            ColorPickerFrame.opacityFunc = ColorPickerFrame.func
+            ColorPickerFrame.cancelFunc = function(prev)
+                setColor(prev.r, prev.g, prev.b, prev.opacity or 1)
+            end
+            ColorPickerFrame:Hide()
+            ColorPickerFrame:Show()
+        end
+    end)
+
+    return btn
+end
+
+-- Section header with title + thin gold separator line.
+-- Both line endpoints anchored to parent at the same y to avoid diagonal/aliased rendering.
+local function makeSection(parent, title, x, y)
+    local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    header:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    header:SetText(title)
+    header:SetTextColor(1, 0.82, 0)
+
+    local line = parent:CreateTexture(nil, "OVERLAY")
+    line:SetHeight(1)
+    line:SetColorTexture(1, 0.82, 0, 0.55)
+
+    local function place()
+        local w = header:GetStringWidth() or 0
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT",  parent, "TOPLEFT",  x + w + 10, y - 7)
+        line:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -14,        y - 7)
+    end
+    place()
+    C_Timer.After(0, place)
+    return header
+end
+
+-- Hover tooltip helper. Hooks the widget AND known sub-controls of composite widgets.
+local function addTooltip(widget, text)
+    if not widget or not text or text == "" then return widget end
+    local function show(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(text, 1, 1, 1, true)
+        GameTooltip:Show()
+    end
+    local function hide() GameTooltip:Hide() end
+    local function hook(f)
+        if not f or not f.HookScript then return end
+        f:HookScript("OnEnter", show)
+        f:HookScript("OnLeave", hide)
+    end
+    hook(widget)
+    hook(widget.Slider)
+    hook(widget.Back)
+    hook(widget.Forward)
+    return widget
+end
+
 local function ANCHOR9()
     return {
         { text = L["Top Left"],     value = "TOPLEFT" },
@@ -351,37 +500,46 @@ local function ANCHOR9()
 end
 
 -- ============================================================
--- TABS
+-- TABS — modern Blizzard bottom tabs (PanelTabButtonTemplate),
+-- the same style used by CharacterFrame, SpellBookFrame, etc.
+-- They hang from the bottom edge of the panel and don't overlap the portrait.
 -- ============================================================
-local function makeTab(parent, id, label, idx)
-    local tab = CreateFrame("Button", "TWTab"..id, parent, "BackdropTemplate")
-    tab:SetSize(72, 22)
-    tab:SetPoint("TOPLEFT", parent, "TOPLEFT", 8 + (idx - 1) * 76, -28)
-    tab:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    tab:SetBackdropColor(0.12, 0.12, 0.14, 1)
-    tab:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-    local text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    text:SetPoint("CENTER")
-    text:SetText(label)
-    tab.text = text
+local function makeTab(parent, id, label, prevTab)
+    local tab = CreateFrame("Button", "TWTab"..id, parent, "PanelTabButtonTemplate")
+    tab:SetText(label)
     tab.id = id
+    if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end
+    if prevTab then
+        tab:SetPoint("LEFT", prevTab, "RIGHT", 4, 0)
+    else
+        tab:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 10, 2)
+    end
     return tab
 end
 
+local function styleTabSelected(tab, selected)
+    if selected then
+        if PanelTemplates_SelectTab then PanelTemplates_SelectTab(tab) end
+    else
+        if PanelTemplates_DeselectTab then PanelTemplates_DeselectTab(tab) end
+    end
+end
+
 -- ============================================================
--- PAGES
+-- PAGE BUILDERS
 -- ============================================================
 
 local function buildLayoutPage(page)
-    local y = -10
+    local y = -8
+
+    -- ============ GENERAL ============
+    makeSection(page, L["General"], 14, y); y = y - 22
+
     local btnMover = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
     btnMover:SetSize(160, 22); btnMover:SetPoint("TOPLEFT", 14, y)
     btnMover:SetText(L["Unlock / Lock Mover"])
     btnMover:SetScript("OnClick", function() TW:ToggleMover() end)
+    addTooltip(btnMover, L["Toggle a draggable handle on the tank container so you can move it on screen."])
 
     local label = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("TOPLEFT", 184, y - 4)
@@ -389,8 +547,8 @@ local function buildLayoutPage(page)
 
     local function currentTestCount()
         local n = 0
-        for i = 1, TW.MAX_TANKS do
-            if TW.TankFrames[i] and TW.TankFrames[i]._testMode then n = n + 1 end
+        for i = 1, (TW.MAX_TANKS or 8) do
+            if TW.TankFrames and TW.TankFrames[i] and TW.TankFrames[i]._testMode then n = n + 1 end
         end
         return n
     end
@@ -398,7 +556,7 @@ local function buildLayoutPage(page)
     local testBtns = {}
     local function refreshTestBtns()
         local n = currentTestCount()
-        for i, b in ipairs(testBtns) do
+        for _, b in ipairs(testBtns) do
             if b._count == n then b:LockHighlight() else b:UnlockHighlight() end
         end
     end
@@ -410,283 +568,281 @@ local function buildLayoutPage(page)
         b:SetPoint("TOPLEFT", xs, y)
         b:SetText(count == 0 and L["Off"] or tostring(count))
         b._count = count
-        b:SetScript("OnClick", function()
-            TW:SetTestMode(count)
-            refreshTestBtns()
-        end)
+        b:SetScript("OnClick", function() TW:SetTestMode(count); refreshTestBtns() end)
+        addTooltip(b, count == 0 and L["Stop the simulation."]
+            or format(L["Simulate %d tank frame(s) with fake debuffs and HP."], count))
         testBtns[#testBtns + 1] = b
         xs = xs + 36
     end
     refreshTestBtns()
 
     y = y - 30
-    makeCheck(page, L["Enable"], "enabled", 14, y)
+    addTooltip(makeCheck(page, L["Enable"], "enabled", 14, y),
+        L["Master switch for the addon. When off, TankWatch frames stay hidden."])
 
-    -- Minimap button toggle (lives in global DB, not the active profile)
-    local mmCB = CreateFrame("CheckButton", "TWOpt_minimap", page, "InterfaceOptionsCheckButtonTemplate")
-    mmCB:SetPoint("TOPLEFT", page, "TOPLEFT", 184, y)
-    mmCB.Text:SetText(L["Show minimap button"])
-    mmCB:SetScript("OnShow", function(self)
+    -- Minimap icon checkbox (account-wide, not per-profile)
+    local cbMini = CreateFrame("CheckButton", "TWOpt_minimapIcon", page, "UICheckButtonTemplate")
+    cbMini:SetSize(24, 24)
+    cbMini.Text:SetFontObject("GameFontHighlight")
+    cbMini:SetPoint("TOPLEFT", page, "TOPLEFT", 184, y)
+    cbMini.Text:SetText(L["Show minimap button"])
+    cbMini:SetScript("OnShow", function(self)
         local g = TW:GetGlobalDB()
         self:SetChecked(not (g.minimap and g.minimap.hide))
     end)
-    mmCB:SetScript("OnClick", function(self)
+    cbMini:SetScript("OnClick", function(self)
         local g = TW:GetGlobalDB()
         g.minimap = g.minimap or {}
         g.minimap.hide = not self:GetChecked()
         if TW.UpdateMinimapButton then TW:UpdateMinimapButton() end
     end)
+    cbMini.refresh = function()
+        local g = TW:GetGlobalDB()
+        cbMini:SetChecked(not (g.minimap and g.minimap.hide))
+    end
+    addTooltip(cbMini, L["Show a minimap button. Left-click: options, right-click: toggle mover."])
 
-    y = y - 50
-    local visDD = makeDropdown(page, L["Show in"], "visibilityMode", {
+    y = y - 32
+
+    -- Visibility scope dropdown
+    addTooltip(markAsNew(makeDropdown(page, L["Show in"], "visibilityMode", {
         { text = L["Raid only"],           value = "RAID" },
         { text = L["Raid or 5-man"],       value = "GROUP" },
         { text = L["Always (incl. solo)"], value = "ALWAYS" },
-    }, 14, y, 220)
-    markAsNew(visDD, "v1.x_visibilityMode")
-    y = y - 50
-    makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y)
-    makeDropdown(page, L["Grow Direction"], "growDirection", {
+    }, 14, y, 220), "v1.x_visibilityMode"),
+        L["When TankWatch frames are visible: only in raid, in any group, or always."])
+
+    -- Panel opacity slider (account-wide)
+    local alphaSlider = CreateFrame("Frame", nil, page, "MinimalSliderWithSteppersTemplate")
+    alphaSlider:SetWidth(220)
+    alphaSlider:SetPoint("TOPLEFT", page, "TOPLEFT", 260, y + 18)
+    local function fmtPct(v) return string.format("%d%%", math.floor(v * 100 + 0.5)) end
+    local alphaFormatters = {
+        [MinimalSliderWithSteppersMixin.Label.Min] = function() return "20%" end,
+        [MinimalSliderWithSteppersMixin.Label.Max] = function() return "100%" end,
+        [MinimalSliderWithSteppersMixin.Label.Top] = function(v)
+            return L["Panel opacity"] .. ": " .. fmtPct(v)
+        end,
+    }
+    TankWatchDB = TankWatchDB or {}
+    if TankWatchDB.panelAlpha == nil then TankWatchDB.panelAlpha = 0.8 end
+    alphaSlider:Init(TankWatchDB.panelAlpha, 0.2, 1.0, 16, alphaFormatters)
+    local alphaEvent = (MinimalSliderWithSteppersMixin.Event
+        and MinimalSliderWithSteppersMixin.Event.OnValueChanged) or "OnValueChanged"
+    alphaSlider:RegisterCallback(alphaEvent, function(_, v)
+        v = math.floor(v * 20 + 0.5) / 20
+        TankWatchDB.panelAlpha = v
+        if panel then panel:SetAlpha(v) end
+    end, alphaSlider)
+    addTooltip(alphaSlider, L["Opacity of this options window. Saved account-wide."])
+
+    -- ============ POSITION ============
+    y = y - 60
+    makeSection(page, L["Position"], 14, y); y = y - 24
+
+    addTooltip(makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y),
+        L["Anchor point on the screen used as origin for the X/Y offsets."])
+    addTooltip(makeDropdown(page, L["Grow Direction"], "growDirection", {
         { text = L["Down"], value = "DOWN" }, { text = L["Up"], value = "UP" },
-    }, 184, y)
-    y = y - 50
-    makeSlider(page, L["Offset X"], "anchorX", -1500, 1500, 1, 14, y)
-    makeSlider(page, L["Offset Y"], "anchorY", -1500, 1500, 1, 260, y)
-    y = y - 50
-    makeSlider(page, L["Width"],  "frameWidth",  100, 400, 1, 14, y)
-    makeSlider(page, L["Height"], "frameHeight",  20, 100, 1, 260, y)
-    y = y - 50
-    makeSlider(page, L["Spacing"], "frameSpacing", 0, 40, 1, 14, y)
-    makeSlider(page, L["Scale"],   "frameScale",  0.5, 2.0, 0.05, 260, y)
+    }, 260, y), L["Direction additional tank frames stack from the first one."])
+    y = y - 56
+
+    addTooltip(makeSlider(page, L["Offset X"], "anchorX", -1500, 1500, 1, 14, y),
+        L["Horizontal offset from the anchor point."])
+    addTooltip(makeSlider(page, L["Offset Y"], "anchorY", -1500, 1500, 1, 260, y),
+        L["Vertical offset from the anchor point."])
+
+    -- ============ DIMENSIONS ============
+    y = y - 60
+    makeSection(page, L["Dimensions"], 14, y); y = y - 24
+
+    addTooltip(makeSlider(page, L["Width"],  "frameWidth",  100, 400, 1, 14, y),
+        L["Width of each tank frame in pixels."])
+    addTooltip(makeSlider(page, L["Height"], "frameHeight",  20, 100, 1, 260, y),
+        L["Height of each tank frame in pixels."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Spacing"], "frameSpacing", 0, 40, 1, 14, y),
+        L["Vertical gap between stacked tank frames."])
+    addTooltip(makeSlider(page, L["Scale"],  "frameScale", 0.5, 2.0, 0.05, 260, y),
+        L["Overall scale of all tank frames."])
 end
 
 local function buildBarsPage(page)
-    local y = -10
-    makeMediaDropdown(page, L["Health Texture"], "healthTexture", "statusbar", 14, y, 180)
-    y = y - 50
-    makeDropdown(page, L["Health Color"], "healthColorMode", {
-        { text = L["Class color"],     value = "CLASS" },
+    local y = -8
+
+    -- ============ TEXTURES ============
+    makeSection(page, L["Textures"], 14, y); y = y - 24
+    addTooltip(makeMediaDropdown(page, L["Health Texture"], "healthTexture", "statusbar", 14, y, 180),
+        L["Status bar texture used for the tank health bar."])
+
+    -- ============ HEALTH COLOR ============
+    y = y - 60
+    makeSection(page, L["Health Color"], 14, y); y = y - 24
+    addTooltip(makeDropdown(page, L["Color mode"], "healthColorMode", {
+        { text = L["Class color"],      value = "CLASS" },
         { text = L["Reaction (green)"], value = "REACTION" },
-        { text = L["Custom static"],   value = "STATIC" },
-    }, 14, y, 180)
+        { text = L["Custom static"],    value = "STATIC" },
+    }, 14, y, 180),
+        L["How the health bar is colored: by class, fixed green, or one custom color."])
+    addTooltip(makeColorPicker(page, L["Static color"], "healthStaticColor", 280, y),
+        L["Fixed color used when the mode above is set to 'Custom static'."])
 
-    -- Color picker swatch for STATIC mode (always visible — clicking only
-    -- has effect when color mode is STATIC; user gets visual indication too)
-    local swatchLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    swatchLabel:SetPoint("TOPLEFT", page, "TOPLEFT", 260, y)
-    swatchLabel:SetText(L["Custom color:"])
-
-    local swatch = CreateFrame("Button", "TWOpt_StaticColor", page, "BackdropTemplate")
-    swatch:SetSize(28, 22)
-    swatch:SetPoint("TOPLEFT", swatchLabel, "BOTTOMLEFT", 0, -2)
-    swatch:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
-    })
-    swatch:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
-
-    local function refreshSwatch()
-        local c = TW:GetDB().healthStaticColor or { r = 0.2, g = 0.6, b = 0.2 }
-        swatch:SetBackdropColor(c.r, c.g, c.b, 1)
-    end
-
-    local function openPicker()
-        local c = TW:GetDB().healthStaticColor or { r = 0.2, g = 0.6, b = 0.2 }
-        local r0, g0, b0 = c.r, c.g, c.b
-        local function commit(r, g, b)
-            local db = TW:GetDB()
-            db.healthStaticColor = { r = r, g = g, b = b }
-            refreshSwatch()
-            refresh()
-        end
-        if ColorPickerFrame.SetupColorPickerAndShow then
-            ColorPickerFrame:SetupColorPickerAndShow({
-                r = r0, g = g0, b = b0,
-                hasOpacity = false, opacity = 1,
-                swatchFunc = function()
-                    local r, g, b = ColorPickerFrame:GetColorRGB()
-                    commit(r, g, b)
-                end,
-                cancelFunc = function() commit(r0, g0, b0) end,
-            })
-        else
-            ColorPickerFrame.func = function()
-                local r, g, b = ColorPickerFrame:GetColorRGB()
-                commit(r, g, b)
-            end
-            ColorPickerFrame.cancelFunc = function() commit(r0, g0, b0) end
-            ColorPickerFrame:SetColorRGB(r0, g0, b0)
-            ColorPickerFrame.hasOpacity = false
-            ColorPickerFrame:Hide(); ColorPickerFrame:Show()
-        end
-    end
-
-    swatch:SetScript("OnClick", openPicker)
-    swatch.dbKey = "healthStaticColor"
-    swatch.refresh = refreshSwatch
-    refreshSwatch()
-
-    y = y - 50
-    local bgModeDD = makeDropdown(page, L["Background color mode"], "backgroundColorMode", {
+    -- ============ BACKGROUND ============
+    y = y - 60
+    makeSection(page, L["Background"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeDropdown(page, L["Background color mode"], "backgroundColorMode", {
         { text = L["Custom static"], value = "STATIC" },
         { text = L["Class color"],   value = "CLASS"  },
-    }, 14, y, 180)
-    markAsNew(bgModeDD, "v1.0.4_bgColorMode")
-    y = y - 50
-    local bgTexCheck = makeCheck(page, L["Use textured background"], "useBackgroundTexture", 14, y)
-    markAsNew(bgTexCheck, "v1.0.4_bgTexture")
-    y = y - 26
-    local bgTexDD = makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180)
-    markAsNew(bgTexDD, "v1.0.4_bgTextureDD")
-    y = y - 50
-    makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 14, y)
+    }, 14, y, 180), "v1.0.4_bgColorMode"),
+        L["Color used behind the bar fill: a static color or the tank's class color."])
+    addTooltip(markAsNew(makeColorPicker(page, L["Background color"], "healthBackgroundColor", 280, y), "v1.0.4_bgColor"),
+        L["Custom color used for the health bar background."])
+    y = y - 56
 
-    -- Background color swatch (same pattern as healthStaticColor)
-    local bgLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    bgLabel:SetPoint("TOPLEFT", page, "TOPLEFT", 320, y)
-    bgLabel:SetText(L["Background color:"])
+    addTooltip(markAsNew(makeCheck(page, L["Use textured background"], "useBackgroundTexture", 14, y), "v1.0.4_bgTexture"),
+        L["Use a status-bar texture for the background (otherwise: flat color)."])
+    addTooltip(makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 260, y),
+        L["Opacity of the empty (un-filled) part of the health bar."])
+    y = y - 56
 
-    local bgSwatch = CreateFrame("Button", "TWOpt_BgColor", page, "BackdropTemplate")
-    bgSwatch:SetSize(28, 22)
-    bgSwatch:SetPoint("TOPLEFT", bgLabel, "BOTTOMLEFT", 0, -2)
-    bgSwatch:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
-    })
-    bgSwatch:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+    addTooltip(markAsNew(makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180), "v1.0.4_bgTextureDD"),
+        L["Texture used for the health bar background when the option above is enabled."])
 
-    local function refreshBgSwatch()
-        local c = TW:GetDB().healthBackgroundColor or { r = 0.1, g = 0.1, b = 0.1 }
-        bgSwatch:SetBackdropColor(c.r, c.g, c.b, 1)
-    end
-
-    bgSwatch:SetScript("OnClick", function()
-        local c = TW:GetDB().healthBackgroundColor or { r = 0.1, g = 0.1, b = 0.1 }
-        local r0, g0, b0 = c.r, c.g, c.b
-        local function commit(r, g, b)
-            local db = TW:GetDB()
-            db.healthBackgroundColor = { r = r, g = g, b = b }
-            refreshBgSwatch()
-            refresh()
-        end
-        if ColorPickerFrame.SetupColorPickerAndShow then
-            ColorPickerFrame:SetupColorPickerAndShow({
-                r = r0, g = g0, b = b0,
-                hasOpacity = false, opacity = 1,
-                swatchFunc = function()
-                    local r, g, b = ColorPickerFrame:GetColorRGB()
-                    commit(r, g, b)
-                end,
-                cancelFunc = function() commit(r0, g0, b0) end,
-            })
-        else
-            ColorPickerFrame.func = function()
-                local r, g, b = ColorPickerFrame:GetColorRGB()
-                commit(r, g, b)
-            end
-            ColorPickerFrame.cancelFunc = function() commit(r0, g0, b0) end
-            ColorPickerFrame:SetColorRGB(r0, g0, b0)
-            ColorPickerFrame.hasOpacity = false
-            ColorPickerFrame:Hide(); ColorPickerFrame:Show()
-        end
-    end)
-    bgSwatch.dbKey = "healthBackgroundColor"
-    bgSwatch.refresh = refreshBgSwatch
-    refreshBgSwatch()
-    markAsNew(bgSwatch, "v1.0.4_bgColor")
-
-    y = y - 50
-    makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y)
-    makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y)
+    -- ============ RANGE FADE ============
+    y = y - 60
+    makeSection(page, L["Range Fade"], 14, y); y = y - 24
+    addTooltip(makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y),
+        L["Reduce the alpha of tank frames whose unit is out of 40-yard range."])
+    addTooltip(makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y),
+        L["Alpha applied to out-of-range tank frames."])
 end
 
 local function buildTextPage(page)
-    local y = -10
-    makeCheck(page, L["Show Name"], "showName", 14, y)
-    makeDropdown(page, L["Name Position"], "nameAnchor", ANCHOR9(), 184, y)
-    y = y - 50
-    makeSlider(page, L["Name Offset X"], "nameX", -80, 80, 1, 14, y)
-    makeSlider(page, L["Name Offset Y"], "nameY", -80, 80, 1, 260, y)
-    y = y - 50
-    makeSlider(page, L["Name max length (0=off)"], "nameMaxLength", 0, 30, 1, 14, y, 250)
-    y = y - 40
-    makeCheck(page, L["Show Health Text"], "showHealthText", 14, y)
-    makeDropdown(page, L["HP text position"], "healthTextAnchor", ANCHOR9(), 184, y)
-    y = y - 50
-    makeSlider(page, L["HP text Offset X"], "healthTextX", -80, 80, 1, 14, y)
-    makeSlider(page, L["HP text Offset Y"], "healthTextY", -80, 80, 1, 260, y)
-    y = y - 50
-    -- Note: PERCENT / CURRENT_PERCENT removed in 12.0 — UnitHealth is
-    -- secret-tagged, so we can't compute cur/max for a percent. Only
-    -- absolute formats remain.
-    makeDropdown(page, L["HP format"], "healthTextFormat", {
+    local y = -8
+
+    -- HP formats — PERCENT removed (UnitHealth is secret in 12.0, can't compute cur/max)
+    local FORMATS = {
         { text = L["Current (50M)"],   value = "CURRENT" },
         { text = L["Current / Max"],   value = "CURRENT_MAX" },
-    }, 14, y, 200)
+    }
 
+    -- ============ NAME ============
+    makeSection(page, L["Name"], 14, y); y = y - 24
+    addTooltip(makeCheck(page, L["Show Name"], "showName", 14, y),
+        L["Show the tank's name on the frame."])
+    addTooltip(makeDropdown(page, L["Name Position"], "nameAnchor", ANCHOR9(), 184, y),
+        L["Anchor point where the name is attached on the frame."])
+    y = y - 56
+
+    addTooltip(makeSlider(page, L["Name Offset X"], "nameX", -80, 80, 1, 14, y),
+        L["Horizontal offset of the name from its anchor."])
+    addTooltip(makeSlider(page, L["Name Offset Y"], "nameY", -80, 80, 1, 260, y),
+        L["Vertical offset of the name from its anchor."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Name max length (0=off)"], "nameMaxLength", 0, 30, 1, 14, y, 250),
+        L["Trim the name after this many characters. 0 disables trimming."])
+
+    -- ============ HEALTH TEXT ============
     y = y - 60
-    local fontHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    fontHeader:SetPoint("TOPLEFT", 14, y)
-    fontHeader:SetText(L["Font (applies to all text)"])
-    y = y - 18
-    makeMediaDropdown(page, L["Font"], "fontFace", "font", 14, y, 180)
-    y = y - 50
-    makeSlider(page, L["Font Size"], "fontSize", 8, 24, 1, 14, y)
-    makeDropdown(page, L["Outline"], "fontOutline", {
+    makeSection(page, L["Health Text"], 14, y); y = y - 24
+    addTooltip(makeCheck(page, L["Show Health Text"], "showHealthText", 14, y),
+        L["Display HP value as text on the health bar."])
+    addTooltip(makeDropdown(page, L["HP text position"], "healthTextAnchor", ANCHOR9(), 184, y),
+        L["Anchor point of the HP text on the bar."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["HP text Offset X"], "healthTextX", -80, 80, 1, 14, y),
+        L["Horizontal offset of the HP text."])
+    addTooltip(makeSlider(page, L["HP text Offset Y"], "healthTextY", -80, 80, 1, 260, y),
+        L["Vertical offset of the HP text."])
+    y = y - 56
+    addTooltip(makeDropdown(page, L["HP format"], "healthTextFormat", FORMATS, 14, y, 200),
+        L["Format of the HP value. Percent is unavailable in 12.0 (secret-tagged HP)."])
+
+    -- ============ FONT ============
+    y = y - 60
+    makeSection(page, L["Font (applies to all text)"], 14, y); y = y - 24
+    addTooltip(makeMediaDropdown(page, L["Font"], "fontFace", "font", 14, y, 180),
+        L["Font used for every text on the tank frames."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Font Size"], "fontSize", 8, 24, 1, 14, y),
+        L["Base font size in points."])
+    addTooltip(makeDropdown(page, L["Outline"], "fontOutline", {
         { text = L["None"],          value = "NONE" },
         { text = L["Outline"],       value = "OUTLINE" },
         { text = L["Thick Outline"], value = "THICKOUTLINE" },
-    }, 260, y)
+    }, 260, y), L["Black outline drawn around text for readability."])
 end
 
 local function buildAurasPage(page)
-    local y = -10
-    makeCheck(page, L["Show Auras"], "showAuras", 14, y)
-    makeCheck(page, L["Only debuffs with stacks"], "aurasOnlyStacks", 184, y)
+    local y = -8
+
+    -- ============ DISPLAY ============
+    makeSection(page, L["Display"], 14, y); y = y - 24
+    addTooltip(makeCheck(page, L["Show Auras"], "showAuras", 14, y),
+        L["Show the tank's boss-cast debuffs as icons on the frame."])
+    addTooltip(makeCheck(page, L["Only debuffs with stacks"], "aurasOnlyStacks", 184, y),
+        L["Hide debuffs that don't have a stack count (applications == 1)."])
     y = y - 30
+
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 14, y)
-    note:SetWidth(520); note:SetJustifyH("LEFT")
-    note:SetText(L["Only boss-cast HARMFUL auras are shown by default. Use the Filters tab to whitelist M+ debuffs or blacklist noise."])
-    y = y - 34
-    makeSlider(page, L["Max Count"], "aurasMaxCount", 1, 10, 1, 14, y)
-    makeSlider(page, L["Size"], "aurasSize", 16, 64, 1, 260, y)
-    y = y - 50
-    makeSlider(page, L["Spacing"], "aurasSpacing", 0, 12, 1, 14, y)
-    y = y - 50
-    makeDropdown(page, L["Anchor"], "aurasAnchor", ANCHOR9(), 14, y)
-    makeDropdown(page, L["Grow X"], "aurasGrowX", {
+    note:SetWidth(680); note:SetJustifyH("LEFT")
+    note:SetText(L["By default only boss-cast HARMFUL auras show. Use the Filters tab to whitelist M+ debuffs or blacklist noise."])
+    y = y - 32
+
+    -- ============ SIZE ============
+    makeSection(page, L["Size"], 14, y); y = y - 24
+    addTooltip(makeSlider(page, L["Max Count"], "aurasMaxCount", 1, 10, 1, 14, y),
+        L["Maximum number of debuff icons shown per tank frame."])
+    addTooltip(makeSlider(page, L["Size"], "aurasSize", 16, 64, 1, 260, y),
+        L["Size of each debuff icon in pixels."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Spacing"], "aurasSpacing", 0, 12, 1, 14, y),
+        L["Gap between debuff icons in pixels."])
+
+    -- ============ LAYOUT ============
+    y = y - 60
+    makeSection(page, L["Layout"], 14, y); y = y - 24
+    addTooltip(makeDropdown(page, L["Anchor"], "aurasAnchor", ANCHOR9(), 14, y),
+        L["Where the debuff row attaches on the tank frame."])
+    addTooltip(makeDropdown(page, L["Grow X"], "aurasGrowX", {
         { text = L["Left"],  value = "LEFT" },
         { text = L["Right"], value = "RIGHT" },
-    }, 260, y)
-    y = y - 50
-    makeSlider(page, L["Offset X"], "aurasX", -200, 200, 1, 14, y)
-    makeSlider(page, L["Offset Y"], "aurasY", -200, 200, 1, 260, y)
-
-    -- ── Stack count ──────────────────────────────────────────
+    }, 260, y), L["Direction icons stack horizontally from the anchor."])
     y = y - 56
-    local sh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    sh:SetPoint("TOPLEFT", 14, y); sh:SetText(L["Stack count"])
-    y = y - 22
-    local stackAnchorDD = makeDropdown(page, L["Stack anchor"], "auraStackAnchor", ANCHOR9(), 14, y)
-    markAsNew(stackAnchorDD, "v1.x_stackPos")
-    makeSlider(page, L["Stack size (0 = auto)"], "auraStackSize", 0, 32, 1, 260, y, 200)
-    y = y - 50
-    makeSlider(page, L["Stack offset X"], "auraStackX", -30, 30, 1, 14, y)
-    makeSlider(page, L["Stack offset Y"], "auraStackY", -30, 30, 1, 260, y)
+    addTooltip(makeSlider(page, L["Offset X"], "aurasX", -200, 200, 1, 14, y),
+        L["Horizontal offset of the debuff row."])
+    addTooltip(makeSlider(page, L["Offset Y"], "aurasY", -200, 200, 1, 260, y),
+        L["Vertical offset of the debuff row."])
 
-    -- ── Timer ────────────────────────────────────────────────
-    y = y - 50
-    local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Timer"])
-    local showTimerCheck = makeCheck(page, L["Show timer"], "auraTimerShow", 184, y - 2)
-    markAsNew(showTimerCheck, "v1.x_timerPos")
-    y = y - 22
-    makeDropdown(page, L["Timer anchor"], "auraTimerAnchor", ANCHOR9(), 14, y)
-    makeSlider(page, L["Timer size (0 = auto)"], "auraTimerSize", 0, 24, 1, 260, y, 200)
-    y = y - 50
-    makeSlider(page, L["Timer offset X"], "auraTimerX", -30, 30, 1, 14, y)
-    makeSlider(page, L["Timer offset Y"], "auraTimerY", -30, 30, 1, 260, y)
+    -- ============ STACK COUNT ============
+    y = y - 60
+    makeSection(page, L["Stack count"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeDropdown(page, L["Stack anchor"], "auraStackAnchor", ANCHOR9(), 14, y), "v1.x_stackPos"),
+        L["Anchor point of the stack-count text on each icon."])
+    addTooltip(makeSlider(page, L["Stack size (0 = auto)"], "auraStackSize", 0, 32, 1, 260, y, 200),
+        L["Font size for the stack number. 0 auto-scales with icon size."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Stack offset X"], "auraStackX", -30, 30, 1, 14, y),
+        L["Horizontal offset of the stack-count text from its anchor."])
+    addTooltip(makeSlider(page, L["Stack offset Y"], "auraStackY", -30, 30, 1, 260, y),
+        L["Vertical offset of the stack-count text from its anchor."])
+
+    -- ============ TIMER ============
+    y = y - 60
+    makeSection(page, L["Timer"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show timer"], "auraTimerShow", 14, y), "v1.x_timerPos"),
+        L["Show remaining duration on each debuff icon."])
+    addTooltip(makeDropdown(page, L["Timer anchor"], "auraTimerAnchor", ANCHOR9(), 184, y),
+        L["Anchor point of the timer text on each icon."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Timer size (0 = auto)"], "auraTimerSize", 0, 24, 1, 14, y, 200),
+        L["Font size for the timer text. 0 auto-scales with icon size."])
+    y = y - 56
+    addTooltip(makeSlider(page, L["Timer offset X"], "auraTimerX", -30, 30, 1, 14, y),
+        L["Horizontal offset of the timer text from its anchor."])
+    addTooltip(makeSlider(page, L["Timer offset Y"], "auraTimerY", -30, 30, 1, 260, y),
+        L["Vertical offset of the timer text from its anchor."])
 end
 
 -- ============================================================
@@ -709,6 +865,7 @@ local function makeSpellList(parent, dbKey, title, x, y, w, h)
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header:SetPoint("TOPLEFT", x, y)
     header:SetText(title)
+    header:SetTextColor(1, 0.82, 0)
 
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetPoint("TOPLEFT", x, y - 18)
@@ -760,7 +917,7 @@ local function makeSpellList(parent, dbKey, title, x, y, w, h)
             local r = getRow(i)
             r:Show()
             local n, ic = getSpellInfo(id)
-            r.icon:SetTexture(ic or 134400) -- ? icon fallback
+            r.icon:SetTexture(ic or 134400)
             r.text:SetText((n or "Unknown") .. "  |cffaaaaaa(" .. id .. ")|r")
             r.rm:SetScript("OnClick", function()
                 TW:GetDB()[dbKey][id] = nil
@@ -773,7 +930,6 @@ local function makeSpellList(parent, dbKey, title, x, y, w, h)
     end
     refresh = rebuild
 
-    -- Add row at the bottom of the list area
     local addLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     addLabel:SetPoint("TOPLEFT", x, y - 18 - h - 4)
     addLabel:SetText(L["Spell ID:"])
@@ -808,7 +964,6 @@ local function makeSpellList(parent, dbKey, title, x, y, w, h)
     return { refresh = refresh }
 end
 
--- Name list widget (player names) — same shape as makeSpellList but accepts strings
 local function makeNameList(parent, dbKey, title, x, y, w, h)
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     header:SetPoint("TOPLEFT", x, y); header:SetText(title)
@@ -891,45 +1046,43 @@ local function makeNameList(parent, dbKey, title, x, y, w, h)
 end
 
 local function buildFiltersPage(page)
-    local y = -10
+    local y = -8
 
-    -- ── Tank detection / inclusion ───────────────────────────
-    local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Tank detection"])
-    y = y - 18
+    -- ============ TANK DETECTION ============
+    makeSection(page, L["Tank detection"], 14, y); y = y - 24
 
-    local detectDD = makeDropdown(page, L["Detection mode"], "tankDetection", {
+    addTooltip(markAsNew(makeDropdown(page, L["Detection mode"], "tankDetection", {
         { text = L["Group role (auto-set from spec)"], value = "ROLE" },
         { text = L["Only /maintank (raid)"],           value = "MAINTANK" },
         { text = L["Either role or /maintank"],        value = "BOTH" },
-    }, 14, y, 260)
-    markAsNew(detectDD, "v1.x_tankDetection")
-    y = y - 50
+    }, 14, y, 260), "v1.x_tankDetection"),
+        L["How TankWatch decides who counts as a tank in your group."])
+    y = y - 56
 
-    makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y)
-    y = y - 28
+    addTooltip(makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y),
+        L["Add yourself to the tank list when your active spec role is TANK, even if the raid leader didn't /maintank you."])
+    y = y - 30
 
     local nl = makeNameList(page, "forceIncludeNames",
         L["Always include these players (added on top of detected tanks):"],
         14, y, 360, 60)
     y = y - 16 - 60 - 30
 
-    -- ── Debuff filters section ───────────────────────────────
-    local dh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    dh:SetPoint("TOPLEFT", 14, y); dh:SetText(L["Debuff filters"])
-    y = y - 18
+    -- ============ DEBUFF FILTERS ============
+    y = y - 8
+    makeSection(page, L["Debuff filters"], 14, y); y = y - 24
 
-    local filterDD = makeDropdown(page, L["Filter mode"], "auraFilterMode", {
+    addTooltip(markAsNew(makeDropdown(page, L["Filter mode"], "auraFilterMode", {
         { text = L["All harmful debuffs"],  value = "ALL" },
         { text = L["Boss-cast only"],       value = "BOSS" },
         { text = L["Whitelist only"],       value = "WHITELIST" },
-    }, 14, y, 220)
-    markAsNew(filterDD, "v1.x_filterMode")
-    y = y - 50
+    }, 14, y, 220), "v1.x_filterMode"),
+        L["Which debuffs to show: every HARMFUL aura, only those cast by bosses, or only spells in your whitelist."])
+    y = y - 56
 
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 14, y)
-    note:SetWidth(520); note:SetJustifyH("LEFT")
+    note:SetWidth(680); note:SetJustifyH("LEFT")
     note:SetText(L["Whitelist always shows regardless of mode. Blacklist always hides."])
     y = y - 32
 
@@ -943,11 +1096,7 @@ local function buildFiltersPage(page)
 end
 
 -- ============================================================
--- POPUP: name input (used by New / Copy)
--- IMPORTANT: register popups LAZILY (inside ensurePopups, called on first
--- panel build). Mutating the global StaticPopupDialogs at file load time
--- triggers a persistent taint in WoW 12.0 that propagates to unrelated
--- protected calls (e.g. UseContainerItem when clicking bag items).
+-- POPUPS (lazy: mutating StaticPopupDialogs at file load taints in 12.0)
 -- ============================================================
 local _popupsRegistered = false
 local function ensurePopups()
@@ -959,11 +1108,9 @@ local function ensurePopups()
         button2      = CANCEL or "Cancel",
         hasEditBox   = true,
         editBoxWidth = 240,
-        timeout      = 0,
-        whileDead    = true,
-        hideOnEscape = true,
-        OnShow       = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
-        OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
+        timeout      = 0, whileDead = true, hideOnEscape = true,
+        OnShow   = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
+        OnAccept = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
         EditBoxOnEnterPressed = function(self)
             local parent = self:GetParent()
             if parent.data and parent.data.onAccept then parent.data.onAccept(self:GetText()) end
@@ -975,9 +1122,7 @@ local function ensurePopups()
         text         = "%s",
         button1      = YES or "Yes",
         button2      = NO  or "No",
-        timeout      = 0,
-        whileDead    = true,
-        hideOnEscape = true,
+        timeout      = 0, whileDead = true, hideOnEscape = true,
         OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept() end end,
     }
     _popupsRegistered = true
@@ -998,61 +1143,55 @@ end
 -- ============================================================
 -- PROFILES PAGE
 -- ============================================================
+local profileDropdownRefresh
+
 local function buildProfilesPage(page)
     local y = -10
 
-    -- Active profile dropdown (custom — refreshes from TW:ListProfiles)
+    -- Character label
+    local charLabel = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    charLabel:SetPoint("TOPLEFT", 14, y)
+    charLabel:SetText(L["Character:"] .. " |cffffffff" .. (TW:GetCharKey()) .. "|r")
+
+    y = y - 24
+
+    -- Active profile dropdown
     local labelFS = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     labelFS:SetPoint("TOPLEFT", 14, y)
     labelFS:SetText(L["Active profile"])
 
-    local dd = CreateFrame("Frame", "TWOpt_DD_profile", page, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", -18, -2)
-    UIDropDownMenu_SetWidth(dd, 200)
+    local dd = CreateFrame("DropdownButton", "TWOpt_DD_activeProfile", page, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", 0, -2)
+    dd:SetWidth(220)
 
-    local function refreshDD()
-        UIDropDownMenu_SetText(dd, TW:GetActiveProfileName())
-    end
-    UIDropDownMenu_Initialize(dd, function()
+    dd:SetupMenu(function(_, rootDescription)
         for _, name in ipairs(TW:ListProfiles()) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text    = name
-            info.value   = name
-            info.checked = (name == TW:GetActiveProfileName())
-            info.func    = function()
-                TW:SetActiveProfile(name)
-                refreshDD()
-                if panel and panel.refreshAll then panel.refreshAll() end
-            end
-            UIDropDownMenu_AddButton(info)
+            rootDescription:CreateRadio(name,
+                function() return name == TW:GetActiveProfileName() end,
+                function()
+                    TW:SetActiveProfile(name)
+                    if panel and panel.refreshAll then panel.refreshAll() end
+                end)
         end
     end)
-    dd.refresh = refreshDD
-    refreshDD()
+    profileDropdownRefresh = function() dd:GenerateMenu() end
+    profileDropdownRefresh()
 
-    -- Char info
-    local charFS = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    charFS:SetPoint("TOPLEFT", 240, y - 20)
-    charFS:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
+    y = y - 56
 
-    y = y - 64
-
-    -- Action buttons
-    local function mkBtn(text, x, yy, w, onClick)
-        local b = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
-        b:SetSize(w or 110, 22)
-        b:SetPoint("TOPLEFT", x, yy)
-        b:SetText(text)
-        b:SetScript("OnClick", onClick)
-        return b
-    end
-
-    local newBtn = mkBtn(L["New..."], 14, y, 110, function()
+    -- New / Reset / Delete row
+    local btnNew = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnNew:SetSize(110, 22)
+    btnNew:SetPoint("TOPLEFT", 14, y)
+    btnNew:SetText(L["New..."])
+    btnNew:SetScript("OnClick", function()
         askName(L["Name of the new profile (copies current settings):"], function(name)
+            name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if name == "" then return end
             local ok, err = TW:CreateProfile(name, TW:GetActiveProfileName())
             if ok then
                 TW:SetActiveProfile(name)
-                refreshDD()
+                profileDropdownRefresh()
                 if panel and panel.refreshAll then panel.refreshAll() end
                 print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' created"], name))
             else
@@ -1060,17 +1199,26 @@ local function buildProfilesPage(page)
             end
         end)
     end)
-    markAsNew(newBtn, "v1.x_profiles")
+    addTooltip(btnNew, L["Create a new profile copying the currently active settings."])
 
-    mkBtn(L["Reset"], 134, y, 110, function()
+    local btnReset = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnReset:SetSize(110, 22)
+    btnReset:SetPoint("LEFT", btnNew, "RIGHT", 6, 0)
+    btnReset:SetText(L["Reset"])
+    btnReset:SetScript("OnClick", function()
         askConfirm(format(L["Reset profile '%s' to defaults?"], TW:GetActiveProfileName()), function()
             TW:ResetCurrentProfile()
             if panel and panel.refreshAll then panel.refreshAll() end
             if TW.RefreshAll then TW:RefreshAll() end
         end)
     end)
+    addTooltip(btnReset, L["Reset the active profile back to default values."])
 
-    mkBtn(L["Delete"], 254, y, 110, function()
+    local btnDelete = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnDelete:SetSize(110, 22)
+    btnDelete:SetPoint("LEFT", btnReset, "RIGHT", 6, 0)
+    btnDelete:SetText(L["Delete"])
+    btnDelete:SetScript("OnClick", function()
         local cur = TW:GetActiveProfileName()
         if cur == "Default" then
             print("|cff00ff96TankWatch:|r " .. L["cannot delete Default"]); return
@@ -1078,71 +1226,92 @@ local function buildProfilesPage(page)
         askConfirm(format(L["Delete profile '%s'?"], cur), function()
             TW:DeleteProfile(cur)
             TW:SetActiveProfile("Default")
-            refreshDD()
+            profileDropdownRefresh()
             if panel and panel.refreshAll then panel.refreshAll() end
         end)
     end)
+    addTooltip(btnDelete, L["Delete the active profile (Default cannot be deleted)."])
 
     y = y - 36
 
     -- Export
-    local expHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    expHeader:SetPoint("TOPLEFT", 14, y)
-    expHeader:SetText(L["Export"])
+    local exportLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    exportLabel:SetPoint("TOPLEFT", 14, y)
+    exportLabel:SetText(L["Export"])
+    exportLabel:SetTextColor(1, 0.82, 0)
+
     y = y - 18
 
-    local expScroll = CreateFrame("ScrollFrame", "TWOpt_ExportScroll", page, "InputScrollFrameTemplate")
-    expScroll:SetSize(520, 80)
-    expScroll:SetPoint("TOPLEFT", 14, y)
-    expScroll.EditBox:SetWidth(500)
-    expScroll.EditBox:SetFontObject("ChatFontSmall")
-    expScroll.EditBox:SetMaxLetters(0)
-    expScroll.CharCount:Hide()
-    if expScroll.EditBox.SetCountInvisibleLetters then expScroll.EditBox:SetCountInvisibleLetters(true) end
+    local exportScroll = CreateFrame("ScrollFrame", nil, page, "InputScrollFrameTemplate")
+    exportScroll:SetPoint("TOPLEFT", 14, y)
+    exportScroll:SetSize(560, 80)
+    local exportEdit = exportScroll.EditBox
+    exportEdit:SetMaxLetters(0)
+    exportEdit:SetFontObject("ChatFontSmall")
+    exportEdit:SetWidth(540)
+    exportEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    if exportScroll.CharCount then exportScroll.CharCount:Hide() end
+    if exportEdit.SetCountInvisibleLetters then exportEdit:SetCountInvisibleLetters(true) end
 
     local function refreshExport()
-        local s = TW:ExportProfile(TW:GetActiveProfileName()) or ""
-        expScroll.EditBox:SetText(s)
-        expScroll.EditBox:HighlightText(0, 0)
+        local s = TW:ExportProfile(TW:GetActiveProfileName())
+        exportEdit:SetText(s or "")
     end
-
-    y = y - 86
-    local refreshExportBtn = mkBtn(L["Refresh export"], 14, y, 140, refreshExport)
-    markAsNew(refreshExportBtn, "v1.x_profiles_export")
-    mkBtn(L["Select all"], 158, y, 100, function()
-        expScroll.EditBox:SetFocus()
-        expScroll.EditBox:HighlightText()
-    end)
     refreshExport()
 
-    y = y - 30
+    local btnRefreshExport = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnRefreshExport:SetSize(140, 22)
+    btnRefreshExport:SetPoint("TOPLEFT", exportScroll, "BOTTOMLEFT", 0, -4)
+    btnRefreshExport:SetText(L["Refresh export"])
+    btnRefreshExport:SetScript("OnClick", refreshExport)
+    addTooltip(btnRefreshExport, L["Re-build the export string from the current profile values."])
+
+    local btnSelectAll = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnSelectAll:SetSize(110, 22)
+    btnSelectAll:SetPoint("LEFT", btnRefreshExport, "RIGHT", 6, 0)
+    btnSelectAll:SetText(L["Select all"])
+    btnSelectAll:SetScript("OnClick", function()
+        exportEdit:SetFocus(); exportEdit:HighlightText()
+    end)
+    addTooltip(btnSelectAll, L["Highlight the export text so you can Ctrl+C to copy it."])
+
+    y = y - 116
 
     -- Import
-    local impHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    impHeader:SetPoint("TOPLEFT", 14, y)
-    impHeader:SetText(L["Import"])
+    local importLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    importLabel:SetPoint("TOPLEFT", 14, y)
+    importLabel:SetText(L["Import"])
+    importLabel:SetTextColor(1, 0.82, 0)
+
     y = y - 18
 
-    local impScroll = CreateFrame("ScrollFrame", "TWOpt_ImportScroll", page, "InputScrollFrameTemplate")
-    impScroll:SetSize(520, 80)
-    impScroll:SetPoint("TOPLEFT", 14, y)
-    impScroll.EditBox:SetWidth(500)
-    impScroll.EditBox:SetFontObject("ChatFontSmall")
-    impScroll.EditBox:SetMaxLetters(0)
-    impScroll.CharCount:Hide()
-    if impScroll.EditBox.SetCountInvisibleLetters then impScroll.EditBox:SetCountInvisibleLetters(true) end
+    local importScroll = CreateFrame("ScrollFrame", nil, page, "InputScrollFrameTemplate")
+    importScroll:SetPoint("TOPLEFT", 14, y)
+    importScroll:SetSize(560, 80)
+    local importEdit = importScroll.EditBox
+    importEdit:SetMaxLetters(0)
+    importEdit:SetFontObject("ChatFontSmall")
+    importEdit:SetWidth(540)
+    importEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    if importScroll.CharCount then importScroll.CharCount:Hide() end
+    if importEdit.SetCountInvisibleLetters then importEdit:SetCountInvisibleLetters(true) end
 
-    y = y - 86
-    mkBtn(L["Import as new profile..."], 14, y, 200, function()
-        local raw = impScroll.EditBox:GetText()
-        if not raw or raw == "" then
+    local btnImport = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnImport:SetSize(220, 22)
+    btnImport:SetPoint("TOPLEFT", importScroll, "BOTTOMLEFT", 0, -4)
+    btnImport:SetText(L["Import as new profile..."])
+    btnImport:SetScript("OnClick", function()
+        local raw = importEdit:GetText() or ""
+        if raw:gsub("%s", "") == "" then
             print("|cff00ff96TankWatch:|r " .. L["import box is empty"]); return
         end
         askName(L["Name for the imported profile:"], function(name)
+            name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if name == "" then return end
             local ok, err = TW:ImportProfile(name, raw)
             if ok then
                 TW:SetActiveProfile(name)
-                refreshDD()
+                profileDropdownRefresh()
                 refreshExport()
                 if panel and panel.refreshAll then panel.refreshAll() end
                 print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' imported"], name))
@@ -1151,11 +1320,12 @@ local function buildProfilesPage(page)
             end
         end)
     end)
+    addTooltip(btnImport, L["Decode the export string and create a new profile from it."])
 
     page._refreshProfiles = function()
-        refreshDD()
+        profileDropdownRefresh()
         refreshExport()
-        charFS:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
+        charLabel:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
     end
 end
 
@@ -1163,64 +1333,60 @@ local function buildAboutPage(page)
     local version = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
     local author  = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Author")  or "Timikana"
 
-    -- Logo
+    -- Logo (top left)
     local logo = page:CreateTexture(nil, "ARTWORK")
-    logo:SetSize(96, 96)
-    logo:SetPoint("TOPLEFT", 14, -14)
-    logo:SetTexture([[Interface\AddOns\TankWatch\Media\icon]])
+    logo:SetSize(140, 140)
+    logo:SetPoint("TOPLEFT", page, "TOPLEFT", 14, -14)
+    logo:SetTexture("Interface\\AddOns\\TankWatch\\logo.png")
 
-    local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    title:SetPoint("TOPLEFT", logo, "TOPRIGHT", 14, -4)
-    title:SetText("|cff00ff96TankWatch|r")
-
-    local ver = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    ver:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-    ver:SetText("v" .. version)
+    -- Right column anchored to logo
+    local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", logo, "TOPRIGHT", 16, -4)
+    title:SetText("|cff00ff96TankWatch|r  v" .. version)
 
     local sub = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    sub:SetPoint("TOPLEFT", ver, "BOTTOMLEFT", 0, -10)
+    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     sub:SetWidth(380); sub:SetJustifyH("LEFT")
     sub:SetText(L["See every tank in your group with their boss-cast debuffs and stack counts."])
 
     local byLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -10)
+    byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -16)
     byLabel:SetText(L["Author:"] .. " |cffffffff" .. author .. "|r")
 
-    -- Links (selectable for copy)
-    local function makeLink(label, url, anchorTo, dy)
-        local lbl = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lbl:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, dy or -16)
-        lbl:SetText(label)
-        lbl:SetWidth(150); lbl:SetJustifyH("LEFT")
-        local edit = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
-        edit:SetSize(330, 22)
-        edit:SetPoint("LEFT", lbl, "RIGHT", 8, 0)
-        edit:SetAutoFocus(false)
-        edit:SetText(url)
-        edit:SetCursorPosition(0)
-        edit:SetScript("OnEscapePressed", edit.ClearFocus)
-        edit:SetScript("OnEnterPressed",  edit.ClearFocus)
-        edit:SetScript("OnMouseUp", function(self) self:HighlightText() end)
-        return lbl
+    -- URL field
+    local function urlField(yOff, label, url)
+        local lab = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lab:SetPoint("TOPLEFT", 14, yOff)
+        lab:SetText(label)
+
+        local eb = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+        eb:SetSize(440, 22)
+        eb:SetPoint("TOPLEFT", lab, "BOTTOMLEFT", 6, -4)
+        eb:SetAutoFocus(false)
+        eb:SetFontObject("GameFontHighlightSmall")
+        eb:SetText(url)
+        eb:SetCursorPosition(0)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
+        eb:SetScript("OnMouseDown", function(self) self:HighlightText(); self:SetFocus() end)
+        return eb
     end
 
-    local ghLabel    = makeLink(L["GitHub repo:"],  "https://github.com/Timikana/TankWatch",        logo,   -16)
-    local issueLabel = makeLink(L["Report a bug:"], "https://github.com/Timikana/TankWatch/issues", ghLabel, -8)
+    urlField(-170, L["GitHub repo:"],   "https://github.com/Timikana/TankWatch")
+    urlField(-230, L["Report a bug:"],  "https://github.com/Timikana/TankWatch/issues")
 
-    local copyHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    copyHint:SetPoint("TOPLEFT", issueLabel, "BOTTOMLEFT", 0, -10)
-    copyHint:SetText(L["Click a field above and Ctrl+C to copy."])
-
-    -- Slash commands
     local cmdHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOPLEFT", 14, -200)
+    cmdHeader:SetPoint("TOPLEFT", 14, -290)
     cmdHeader:SetText(L["Slash commands"])
+    cmdHeader:SetTextColor(1, 0.82, 0)
 
     local cmds = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     cmds:SetPoint("TOPLEFT", cmdHeader, "BOTTOMLEFT", 0, -6)
-    cmds:SetWidth(520); cmds:SetJustifyH("LEFT"); cmds:SetSpacing(3)
+    cmds:SetWidth(560); cmds:SetJustifyH("LEFT"); cmds:SetSpacing(3)
     cmds:SetText(
         "|cffffff00/tw|r — " .. L["open options"] .. "\n" ..
+        "|cffffff00/tw config|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
+        "|cffffff00/tw options|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
         "|cffffff00/tw mover|r — " .. L["toggle mover"] .. "\n" ..
         "|cffffff00/tw test N|r — " .. L["simulate N tanks (0-8)"] .. "\n" ..
         "|cffffff00/tw reset|r — " .. L["reset all settings + reload"] .. "\n" ..
@@ -1228,14 +1394,19 @@ local function buildAboutPage(page)
         "|cffffff00/tw auradebug|r — " .. L["print every HARMFUL aura on each tank unit"] .. "\n" ..
         "|cffffff00/tankwatch|r — " .. L["long alias for /tw"]
     )
+
+    local hint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 14, 12)
+    hint:SetText(L["Click a URL to select it, then Ctrl+C to copy."])
 end
 
 -- ============================================================
 -- BUILD
 -- ============================================================
+
 local function build()
-    panel = CreateFrame("Frame", "TankWatchOptions", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(560, 620)
+    panel = CreateFrame("Frame", "TankWatchOptions", UIParent, "PortraitFrameTemplate")
+    panel:SetSize(720, 620)
     panel:SetPoint("CENTER")
     panel:SetMovable(true); panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
@@ -1243,27 +1414,72 @@ local function build()
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
     panel:SetFrameStrata("HIGH")
     panel:Hide()
-    panel.TitleText:SetText(L["TankWatch — Options"])
+    panel:SetClampedToScreen(true)
 
-    local pageHolder = CreateFrame("Frame", nil, panel)
-    pageHolder:SetPoint("TOPLEFT", 4, -56)
-    pageHolder:SetPoint("BOTTOMRIGHT", -4, 4)
+    -- Close on ESC
+    tinsert(UISpecialFrames, "TankWatchOptions")
 
-    local pages = {}
-    local function newPage()
-        local p = CreateFrame("Frame", nil, pageHolder)
-        p:SetAllPoints(pageHolder)
-        p:Hide()
-        return p
+    if panel.SetTitle then panel:SetTitle(L["TankWatch — Options"]) end
+    if panel.SetPortraitToAsset then
+        panel:SetPortraitToAsset("Interface\\AddOns\\TankWatch\\logo.png")
     end
 
-    pages.layout   = newPage(); buildLayoutPage(pages.layout)
-    pages.bars     = newPage(); buildBarsPage(pages.bars)
-    pages.text     = newPage(); buildTextPage(pages.text)
-    pages.auras    = newPage(); buildAurasPage(pages.auras)
-    pages.filters  = newPage(); buildFiltersPage(pages.filters)
-    pages.profiles = newPage(); buildProfilesPage(pages.profiles)
-    pages.about    = newPage(); buildAboutPage(pages.about)
+    local pageHolder = CreateFrame("Frame", nil, panel)
+    pageHolder:SetPoint("TOPLEFT", 8, -60)
+    pageHolder:SetPoint("BOTTOMRIGHT", -8, 8)
+
+    -- Panel opacity (account-wide preference)
+    TankWatchDB = TankWatchDB or {}
+    if TankWatchDB.panelAlpha == nil then TankWatchDB.panelAlpha = 0.8 end
+    panel:SetAlpha(TankWatchDB.panelAlpha)
+
+    local pages = {}
+    local function newPage(name)
+        local sf = CreateFrame("ScrollFrame", "TWScroll_"..name, pageHolder, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", pageHolder, "TOPLEFT", 0, 0)
+        sf:SetPoint("BOTTOMRIGHT", pageHolder, "BOTTOMRIGHT", -24, 0)
+        sf:Hide()
+
+        local content = CreateFrame("Frame", nil, sf)
+        content:SetSize(680, 900)
+        sf:SetScrollChild(content)
+        sf.content = content
+        return sf
+    end
+
+    local function autoFitPage(sf)
+        C_Timer.After(0, function()
+            local content = sf.content
+            if not content or not content:GetTop() then return end
+            local top = content:GetTop()
+            local lowest = top
+            for _, child in ipairs({content:GetChildren()}) do
+                if child:IsShown() then
+                    local b = child:GetBottom()
+                    if b and b < lowest then lowest = b end
+                end
+            end
+            for _, region in ipairs({content:GetRegions()}) do
+                if region:IsShown() then
+                    local b = region:GetBottom()
+                    if b and b < lowest then lowest = b end
+                end
+            end
+            local used = math.max(50, top - lowest + 16)
+            local viewportH = sf:GetHeight()
+            content:SetHeight(math.max(used, viewportH))
+            local sb = sf.ScrollBar or _G[sf:GetName() .. "ScrollBar"]
+            if sb then sb:SetShown(used > viewportH + 1) end
+        end)
+    end
+
+    pages.layout   = newPage("layout");   buildLayoutPage(pages.layout.content);     autoFitPage(pages.layout)
+    pages.bars     = newPage("bars");     buildBarsPage(pages.bars.content);         autoFitPage(pages.bars)
+    pages.text     = newPage("text");     buildTextPage(pages.text.content);         autoFitPage(pages.text)
+    pages.auras    = newPage("auras");    buildAurasPage(pages.auras.content);       autoFitPage(pages.auras)
+    pages.filters  = newPage("filters");  buildFiltersPage(pages.filters.content);   autoFitPage(pages.filters)
+    pages.profiles = newPage("profiles"); buildProfilesPage(pages.profiles.content); autoFitPage(pages.profiles)
+    pages.about    = newPage("about");    buildAboutPage(pages.about.content);       autoFitPage(pages.about)
 
     local tabs = {
         { id = "layout",   label = L["Layout"] },
@@ -1279,20 +1495,12 @@ local function build()
         for _, p in pairs(pages) do p:Hide() end
         if pages[id] then pages[id]:Show() end
         for _, t in ipairs(tabBtns) do
-            if t.id == id then
-                t:SetBackdropColor(0.05, 0.18, 0.20, 1)
-                t:SetBackdropBorderColor(0, 1, 0.6, 1)
-                t.text:SetTextColor(0, 1, 0.6)
-            else
-                t:SetBackdropColor(0.12, 0.12, 0.14, 1)
-                t:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-                t.text:SetTextColor(0.8, 0.8, 0.8)
-            end
+            styleTabSelected(t, t.id == id)
         end
     end
 
     for i, t in ipairs(tabs) do
-        local b = makeTab(panel, t.id, t.label, i)
+        local b = makeTab(panel, t.id, t.label, tabBtns[i - 1])
         b:SetScript("OnClick", function() selectTab(t.id) end)
         tabBtns[#tabBtns + 1] = b
     end
@@ -1304,9 +1512,6 @@ local function build()
                 if child.dbKey then
                     if child.SetChecked then
                         child:SetChecked(db[child.dbKey] and true or false)
-                    elseif child.SetValue and child.edit then
-                        child:SetValue(db[child.dbKey] or 0)
-                        child.edit:SetText(tostring(db[child.dbKey] or 0))
                     elseif child.refresh then
                         child:refresh()
                     end
@@ -1315,11 +1520,11 @@ local function build()
             end
         end
         walk(pageHolder)
-        if pages.profiles and pages.profiles._refreshProfiles then
-            pages.profiles._refreshProfiles()
+        if pages.profiles and pages.profiles.content and pages.profiles.content._refreshProfiles then
+            pages.profiles.content._refreshProfiles()
         end
-        if pages.filters and pages.filters._refreshFilters then
-            pages.filters._refreshFilters()
+        if pages.filters and pages.filters.content and pages.filters.content._refreshFilters then
+            pages.filters.content._refreshFilters()
         end
     end
 

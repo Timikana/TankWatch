@@ -200,3 +200,153 @@ L["aura diagnostic:"]                       = "diagnostic des auras :"
 L["long alias for /tw"]                     = "alias long pour /tw"
 L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tw|r for options"] =
     "|cff00ff96TankWatch|r v%s chargé — tapez |cffffff00/tw|r pour les options"
+
+-- Section headers
+L["General"]    = "Général"
+L["Position"]   = "Position"
+L["Dimensions"] = "Dimensions"
+L["Textures"]   = "Textures"
+L["Background"] = "Fond"
+L["Range Fade"] = "Estompage hors de portée"
+L["Name"]       = "Nom"
+L["Health Text"] = "Texte de vie"
+L["Display"]    = "Affichage"
+L["Color mode"] = "Mode de couleur"
+L["Static color"]      = "Couleur statique"
+L["Background color"]  = "Couleur de fond"
+L["Panel opacity"]     = "Opacité du panneau"
+L["alias"]             = "alias"
+
+-- Layout tooltips
+L["Toggle a draggable handle on the tank container so you can move it on screen."] =
+    "Affiche une poignée pour déplacer le conteneur des tanks à l'écran."
+L["Stop the simulation."] = "Arrêter la simulation."
+L["Simulate %d tank frame(s) with fake debuffs and HP."] =
+    "Simule %d cadre(s) de tank avec des debuffs et PV factices."
+L["Master switch for the addon. When off, TankWatch frames stay hidden."] =
+    "Interrupteur principal de l'addon. Désactivé, les cadres TankWatch restent cachés."
+L["Show a minimap button. Left-click: options, right-click: toggle mover."] =
+    "Affiche un bouton sur la minimap. Clic gauche : options, clic droit : mover."
+L["When TankWatch frames are visible: only in raid, in any group, or always."] =
+    "Quand TankWatch s'affiche : seulement en raid, en groupe quelconque, ou toujours."
+L["Opacity of this options window. Saved account-wide."] =
+    "Opacité de cette fenêtre d'options. Enregistré pour tout le compte."
+L["Anchor point on the screen used as origin for the X/Y offsets."] =
+    "Point d'ancrage à l'écran utilisé comme origine pour les décalages X/Y."
+L["Direction additional tank frames stack from the first one."] =
+    "Direction dans laquelle les cadres de tank supplémentaires s'empilent."
+L["Horizontal offset from the anchor point."] = "Décalage horizontal depuis le point d'ancrage."
+L["Vertical offset from the anchor point."]   = "Décalage vertical depuis le point d'ancrage."
+L["Width of each tank frame in pixels."]      = "Largeur de chaque cadre de tank, en pixels."
+L["Height of each tank frame in pixels."]     = "Hauteur de chaque cadre de tank, en pixels."
+L["Vertical gap between stacked tank frames."] = "Espace vertical entre les cadres de tank empilés."
+L["Overall scale of all tank frames."]        = "Échelle globale de tous les cadres de tank."
+
+-- Bars tooltips
+L["Status bar texture used for the tank health bar."] =
+    "Texture de la barre de progression utilisée pour la barre de vie."
+L["How the health bar is colored: by class, fixed green, or one custom color."] =
+    "Coloration de la barre de vie : par classe, vert fixe, ou couleur personnalisée."
+L["Fixed color used when the mode above is set to 'Custom static'."] =
+    "Couleur fixe utilisée quand le mode ci-dessus est sur 'Personnalisée'."
+L["Color used behind the bar fill: a static color or the tank's class color."] =
+    "Couleur utilisée derrière le remplissage de la barre : couleur fixe ou couleur de classe du tank."
+L["Custom color used for the health bar background."] =
+    "Couleur personnalisée pour le fond de la barre de vie."
+L["Use a status-bar texture for the background (otherwise: flat color)."] =
+    "Utilise une texture de barre pour le fond (sinon : couleur unie)."
+L["Opacity of the empty (un-filled) part of the health bar."] =
+    "Opacité de la partie vide (non remplie) de la barre de vie."
+L["Texture used for the health bar background when the option above is enabled."] =
+    "Texture utilisée pour le fond de la barre de vie quand l'option ci-dessus est activée."
+L["Reduce the alpha of tank frames whose unit is out of 40-yard range."] =
+    "Réduit l'alpha des cadres dont le tank est hors de portée (40m)."
+L["Alpha applied to out-of-range tank frames."] =
+    "Alpha appliqué aux cadres des tanks hors de portée."
+
+-- Text tooltips
+L["Show the tank's name on the frame."] = "Affiche le nom du tank sur le cadre."
+L["Anchor point where the name is attached on the frame."] =
+    "Point d'ancrage où le nom est attaché sur le cadre."
+L["Horizontal offset of the name from its anchor."] = "Décalage horizontal du nom depuis son ancrage."
+L["Vertical offset of the name from its anchor."]   = "Décalage vertical du nom depuis son ancrage."
+L["Trim the name after this many characters. 0 disables trimming."] =
+    "Tronque le nom au-delà de ce nombre de caractères. 0 désactive."
+L["Display HP value as text on the health bar."] =
+    "Affiche la valeur de PV en texte sur la barre de vie."
+L["Anchor point of the HP text on the bar."] = "Point d'ancrage du texte de vie sur la barre."
+L["Horizontal offset of the HP text."] = "Décalage horizontal du texte de vie."
+L["Vertical offset of the HP text."]   = "Décalage vertical du texte de vie."
+L["Format of the HP value. Percent is unavailable in 12.0 (secret-tagged HP)."] =
+    "Format de la valeur de vie. Le pourcentage est indisponible en 12.0 (PV protégés)."
+L["Font used for every text on the tank frames."] =
+    "Police utilisée pour tous les textes sur les cadres de tank."
+L["Base font size in points."] = "Taille de police de base, en points."
+L["Black outline drawn around text for readability."] =
+    "Contour noir autour du texte pour la lisibilité."
+
+-- Auras tooltips
+L["Show the tank's boss-cast debuffs as icons on the frame."] =
+    "Affiche les debuffs lancés par les boss en icônes sur le cadre du tank."
+L["Hide debuffs that don't have a stack count (applications == 1)."] =
+    "Masque les debuffs qui n'ont pas de stacks (applications == 1)."
+L["By default only boss-cast HARMFUL auras show. Use the Filters tab to whitelist M+ debuffs or blacklist noise."] =
+    "Par défaut, seuls les debuffs HARMFUL lancés par les boss s'affichent. Utilise l'onglet Filtres pour whitelister les debuffs M+ ou blacklister le bruit."
+L["Maximum number of debuff icons shown per tank frame."] =
+    "Nombre maximum d'icônes de debuff affichées par cadre de tank."
+L["Size of each debuff icon in pixels."] = "Taille de chaque icône de debuff, en pixels."
+L["Gap between debuff icons in pixels."] = "Espace entre les icônes de debuff, en pixels."
+L["Where the debuff row attaches on the tank frame."] =
+    "Où la rangée de debuffs s'attache sur le cadre du tank."
+L["Direction icons stack horizontally from the anchor."] =
+    "Direction dans laquelle les icônes s'empilent horizontalement depuis l'ancrage."
+L["Horizontal offset of the debuff row."] = "Décalage horizontal de la rangée de debuffs."
+L["Vertical offset of the debuff row."]   = "Décalage vertical de la rangée de debuffs."
+L["Anchor point of the stack-count text on each icon."] =
+    "Point d'ancrage du texte de stacks sur chaque icône."
+L["Font size for the stack number. 0 auto-scales with icon size."] =
+    "Taille de police pour le nombre de stacks. 0 = auto selon la taille de l'icône."
+L["Horizontal offset of the stack-count text from its anchor."] =
+    "Décalage horizontal du texte de stacks depuis son ancrage."
+L["Vertical offset of the stack-count text from its anchor."] =
+    "Décalage vertical du texte de stacks depuis son ancrage."
+L["Show remaining duration on each debuff icon."] =
+    "Affiche la durée restante sur chaque icône de debuff."
+L["Anchor point of the timer text on each icon."] =
+    "Point d'ancrage du texte de timer sur chaque icône."
+L["Font size for the timer text. 0 auto-scales with icon size."] =
+    "Taille de police pour le texte de timer. 0 = auto selon la taille de l'icône."
+L["Horizontal offset of the timer text from its anchor."] =
+    "Décalage horizontal du texte de timer depuis son ancrage."
+L["Vertical offset of the timer text from its anchor."] =
+    "Décalage vertical du texte de timer depuis son ancrage."
+
+-- Filters tooltips
+L["How TankWatch decides who counts as a tank in your group."] =
+    "Comment TankWatch détermine qui compte comme tank dans le groupe."
+L["Add yourself to the tank list when your active spec role is TANK, even if the raid leader didn't /maintank you."] =
+    "T'ajoute à la liste des tanks si ta spé active a le rôle TANK, même si le RL ne t'a pas /maintank."
+L["Which debuffs to show: every HARMFUL aura, only those cast by bosses, or only spells in your whitelist."] =
+    "Quels debuffs afficher : toutes les auras HARMFUL, uniquement celles lancées par les boss, ou uniquement les sorts de la whitelist."
+
+-- Profiles tooltips
+L["Create a new profile copying the currently active settings."] =
+    "Crée un nouveau profil en copiant les réglages actuellement actifs."
+L["Reset the active profile back to default values."] =
+    "Réinitialise le profil actif aux valeurs par défaut."
+L["Delete the active profile (Default cannot be deleted)."] =
+    "Supprime le profil actif (Default ne peut pas être supprimé)."
+L["Re-build the export string from the current profile values."] =
+    "Reconstruit la chaîne d'export à partir des valeurs du profil actuel."
+L["Highlight the export text so you can Ctrl+C to copy it."] =
+    "Surligne le texte d'export pour pouvoir faire Ctrl+C."
+L["Decode the export string and create a new profile from it."] =
+    "Décode la chaîne d'export et crée un nouveau profil à partir d'elle."
+
+-- Color picker
+L["Click to choose a color"] = "Cliquer pour choisir une couleur"
+
+-- About
+L["Click a URL to select it, then Ctrl+C to copy."] =
+    "Clique une URL pour la sélectionner, puis Ctrl+C pour copier."
+L["Font (applies to all text)"] = "Police (s'applique à tous les textes)"
