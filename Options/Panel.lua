@@ -8,6 +8,55 @@ local panel
 local refresh = function() if TW.RefreshAll then TW:RefreshAll() end end
 
 -- ============================================================
+-- "NEW" badge helper — attaches a small pulsing badge to a widget.
+-- Disappears on first OnEnter / OnClick / OnMouseUp.
+-- ============================================================
+local function markAsNew(widget, key)
+    if not widget or not key then return end
+    if not TW.IsFeatureNew or not TW:IsFeatureNew(key) then return end
+
+    -- Container frame so we can attach an animation group and host the
+    -- glow + text together.
+    local f = CreateFrame("Frame", nil, widget, "BackdropTemplate")
+    f:SetSize(38, 18)
+    f:SetPoint("LEFT", widget, "RIGHT", 6, 0)
+    f:SetFrameLevel((widget:GetFrameLevel() or 1) + 5)
+    f:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    f:SetBackdropColor(0.95, 0.45, 0.05, 0.85)        -- orange fill
+    f:SetBackdropBorderColor(1, 0.85, 0.2, 1)         -- gold border
+
+    local badge = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    badge:SetPoint("CENTER")
+    badge:SetTextColor(1, 1, 1)
+    badge:SetText("NEW")
+
+    -- Pulse: looping fade-out + fade-in on the whole frame
+    local ag = f:CreateAnimationGroup()
+    ag:SetLooping("REPEAT")
+    local a1 = ag:CreateAnimation("Alpha")
+    a1:SetFromAlpha(1); a1:SetToAlpha(0.35); a1:SetDuration(0.6); a1:SetOrder(1)
+    local a2 = ag:CreateAnimation("Alpha")
+    a2:SetFromAlpha(0.35); a2:SetToAlpha(1); a2:SetDuration(0.6); a2:SetOrder(2)
+    ag:Play()
+
+    local dismissed = false
+    local function dismiss()
+        if dismissed then return end
+        dismissed = true
+        if TW.MarkFeatureSeen then TW:MarkFeatureSeen(key) end
+        ag:Stop()
+        f:Hide()
+    end
+    pcall(function() widget:HookScript("OnEnter",   dismiss) end)
+    pcall(function() widget:HookScript("OnClick",   dismiss) end)
+    pcall(function() widget:HookScript("OnMouseUp", dismiss) end)
+end
+
+-- ============================================================
 -- WIDGET FACTORIES (same patterns as BossWatch)
 -- ============================================================
 
@@ -389,11 +438,12 @@ local function buildLayoutPage(page)
     end)
 
     y = y - 50
-    makeDropdown(page, L["Show in"], "visibilityMode", {
+    local visDD = makeDropdown(page, L["Show in"], "visibilityMode", {
         { text = L["Raid only"],           value = "RAID" },
         { text = L["Raid or 5-man"],       value = "GROUP" },
         { text = L["Always (incl. solo)"], value = "ALWAYS" },
     }, 14, y, 220)
+    markAsNew(visDD, "v1.x_visibilityMode")
     y = y - 50
     makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y)
     makeDropdown(page, L["Grow Direction"], "growDirection", {
@@ -477,14 +527,17 @@ local function buildBarsPage(page)
     refreshSwatch()
 
     y = y - 50
-    makeDropdown(page, L["Background color mode"], "backgroundColorMode", {
+    local bgModeDD = makeDropdown(page, L["Background color mode"], "backgroundColorMode", {
         { text = L["Custom static"], value = "STATIC" },
         { text = L["Class color"],   value = "CLASS"  },
     }, 14, y, 180)
+    markAsNew(bgModeDD, "v1.0.4_bgColorMode")
     y = y - 50
-    makeCheck(page, L["Use textured background"], "useBackgroundTexture", 14, y)
+    local bgTexCheck = makeCheck(page, L["Use textured background"], "useBackgroundTexture", 14, y)
+    markAsNew(bgTexCheck, "v1.0.4_bgTexture")
     y = y - 26
-    makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180)
+    local bgTexDD = makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180)
+    markAsNew(bgTexDD, "v1.0.4_bgTextureDD")
     y = y - 50
     makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 14, y)
 
@@ -540,6 +593,7 @@ local function buildBarsPage(page)
     bgSwatch.dbKey = "healthBackgroundColor"
     bgSwatch.refresh = refreshBgSwatch
     refreshBgSwatch()
+    markAsNew(bgSwatch, "v1.0.4_bgColor")
 
     y = y - 50
     makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y)
@@ -614,7 +668,8 @@ local function buildAurasPage(page)
     local sh = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sh:SetPoint("TOPLEFT", 14, y); sh:SetText(L["Stack count"])
     y = y - 22
-    makeDropdown(page, L["Stack anchor"], "auraStackAnchor", ANCHOR9(), 14, y)
+    local stackAnchorDD = makeDropdown(page, L["Stack anchor"], "auraStackAnchor", ANCHOR9(), 14, y)
+    markAsNew(stackAnchorDD, "v1.x_stackPos")
     makeSlider(page, L["Stack size (0 = auto)"], "auraStackSize", 0, 32, 1, 260, y, 200)
     y = y - 50
     makeSlider(page, L["Stack offset X"], "auraStackX", -30, 30, 1, 14, y)
@@ -624,7 +679,8 @@ local function buildAurasPage(page)
     y = y - 50
     local th = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Timer"])
-    makeCheck(page, L["Show timer"], "auraTimerShow", 184, y - 2)
+    local showTimerCheck = makeCheck(page, L["Show timer"], "auraTimerShow", 184, y - 2)
+    markAsNew(showTimerCheck, "v1.x_timerPos")
     y = y - 22
     makeDropdown(page, L["Timer anchor"], "auraTimerAnchor", ANCHOR9(), 14, y)
     makeSlider(page, L["Timer size (0 = auto)"], "auraTimerSize", 0, 24, 1, 260, y, 200)
@@ -842,11 +898,12 @@ local function buildFiltersPage(page)
     th:SetPoint("TOPLEFT", 14, y); th:SetText(L["Tank detection"])
     y = y - 18
 
-    makeDropdown(page, L["Detection mode"], "tankDetection", {
+    local detectDD = makeDropdown(page, L["Detection mode"], "tankDetection", {
         { text = L["Group role (auto-set from spec)"], value = "ROLE" },
         { text = L["Only /maintank (raid)"],           value = "MAINTANK" },
         { text = L["Either role or /maintank"],        value = "BOTH" },
     }, 14, y, 260)
+    markAsNew(detectDD, "v1.x_tankDetection")
     y = y - 50
 
     makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y)
@@ -862,11 +919,12 @@ local function buildFiltersPage(page)
     dh:SetPoint("TOPLEFT", 14, y); dh:SetText(L["Debuff filters"])
     y = y - 18
 
-    makeDropdown(page, L["Filter mode"], "auraFilterMode", {
+    local filterDD = makeDropdown(page, L["Filter mode"], "auraFilterMode", {
         { text = L["All harmful debuffs"],  value = "ALL" },
         { text = L["Boss-cast only"],       value = "BOSS" },
         { text = L["Whitelist only"],       value = "WHITELIST" },
     }, 14, y, 220)
+    markAsNew(filterDD, "v1.x_filterMode")
     y = y - 50
 
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -989,7 +1047,7 @@ local function buildProfilesPage(page)
         return b
     end
 
-    mkBtn(L["New..."], 14, y, 110, function()
+    local newBtn = mkBtn(L["New..."], 14, y, 110, function()
         askName(L["Name of the new profile (copies current settings):"], function(name)
             local ok, err = TW:CreateProfile(name, TW:GetActiveProfileName())
             if ok then
@@ -1002,6 +1060,7 @@ local function buildProfilesPage(page)
             end
         end)
     end)
+    markAsNew(newBtn, "v1.x_profiles")
 
     mkBtn(L["Reset"], 134, y, 110, function()
         askConfirm(format(L["Reset profile '%s' to defaults?"], TW:GetActiveProfileName()), function()
@@ -1048,7 +1107,8 @@ local function buildProfilesPage(page)
     end
 
     y = y - 86
-    mkBtn(L["Refresh export"], 14, y, 140, refreshExport)
+    local refreshExportBtn = mkBtn(L["Refresh export"], 14, y, 140, refreshExport)
+    markAsNew(refreshExportBtn, "v1.x_profiles_export")
     mkBtn(L["Select all"], 158, y, 100, function()
         expScroll.EditBox:SetFocus()
         expScroll.EditBox:HighlightText()

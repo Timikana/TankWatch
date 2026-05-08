@@ -132,6 +132,23 @@ end
 
 function TW:GetGlobalDB() return ensureRoot() end
 
+-- ============================================================
+-- "NEW" feature tracking
+--   Each newly-added widget can be tagged with a unique key. The badge
+--   shows once and is dismissed on first hover/click. State persists in
+--   the global DB across characters.
+-- ============================================================
+function TW:IsFeatureNew(key)
+    local g = TW:GetGlobalDB()
+    return not (g.seenFeatures and g.seenFeatures[key])
+end
+
+function TW:MarkFeatureSeen(key)
+    local g = TW:GetGlobalDB()
+    g.seenFeatures = g.seenFeatures or {}
+    g.seenFeatures[key] = true
+end
+
 function TW:GetActiveProfileName()
     local root = ensureRoot()
     local key = TW:GetCharKey()
@@ -493,6 +510,33 @@ function TW:CreateMinimapButton()
 end
 
 -- ============================================================
+-- LIBDATABROKER LAUNCHER (so Titan Panel & ChocolateBar pick us up)
+-- ============================================================
+function TW:RegisterLDB()
+    if TW._ldbRegistered then return end
+    local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
+    if not LDB then return end
+    LDB:NewDataObject("TankWatch", {
+        type = "launcher",
+        text = "TankWatch",
+        icon = [[Interface\AddOns\TankWatch\Media\icon]],
+        OnClick = function(_, button)
+            if button == "RightButton" then
+                if TW.ToggleMover then TW:ToggleMover() end
+            else
+                if TW.ToggleOptions then TW:ToggleOptions() end
+            end
+        end,
+        OnTooltipShow = function(tip)
+            tip:AddLine("|cff00ff96TankWatch|r")
+            tip:AddLine("|cffaaaaaa" .. (TW.L["Left-click: options"] or "Left-click: options") .. "|r")
+            tip:AddLine("|cffaaaaaa" .. (TW.L["Right-click: mover"] or "Right-click: mover") .. "|r")
+        end,
+    })
+    TW._ldbRegistered = true
+end
+
+-- ============================================================
 -- INIT
 -- ============================================================
 local init = CreateFrame("Frame")
@@ -504,6 +548,7 @@ init:SetScript("OnEvent", function()
     if TW.RefreshTanks then TW:RefreshTanks() end
     if TW.RegisterBlizzardSettings then TW:RegisterBlizzardSettings() end
     if TW.CreateMinimapButton then TW:CreateMinimapButton() end
+    if TW.RegisterLDB then TW:RegisterLDB() end
     print(format(TW.L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tw|r for options"],
         C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"))
 end)
