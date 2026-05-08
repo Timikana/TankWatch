@@ -1109,8 +1109,8 @@ local function ensurePopups()
         hasEditBox   = true,
         editBoxWidth = 240,
         timeout      = 0, whileDead = true, hideOnEscape = true,
-        OnShow   = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
-        OnAccept = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
+        OnShow   = function(self) self.EditBox:SetText(""); self.EditBox:SetFocus() end,
+        OnAccept = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.EditBox:GetText()) end end,
         EditBoxOnEnterPressed = function(self)
             local parent = self:GetParent()
             if parent.data and parent.data.onAccept then parent.data.onAccept(self:GetText()) end
