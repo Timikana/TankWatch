@@ -1,6 +1,7 @@
 package-as: TankWatch
 
 curse-project-id: 1536671
+wago-project-id: O67DEYK3
 
 ignore:
   - .gitignore

@@ -6,6 +6,7 @@
 ## IconTexture: Interface\AddOns\TankWatch\Media\icon
 ## SavedVariables: TankWatchDB
 ## X-Curse-Project-ID: 1536671
+## X-Wago-ID: O67DEYK3
 
 # Libs
 Libs\LibStub\LibStub.lua
