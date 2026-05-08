@@ -8,6 +8,5 @@ ignore:
   - .github
   - README.md
   - LICENSE
-  - logo.png
   - CLAUDE.md
   - .pkgmeta
