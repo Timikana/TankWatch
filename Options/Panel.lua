@@ -1372,11 +1372,13 @@ local function buildAboutPage(page)
         return eb
     end
 
-    urlField(-170, L["GitHub repo:"],   "https://github.com/Timikana/TankWatch")
-    urlField(-230, L["Report a bug:"],  "https://github.com/Timikana/TankWatch/issues")
+    urlField(-170, "|cffffffff" .. L["GitHub repo:"]    .. "|r", "https://github.com/Timikana/TankWatch")
+    urlField(-220, "|cffffffff" .. L["Report a bug:"]   .. "|r", "https://github.com/Timikana/TankWatch/issues")
+    urlField(-270, "|cfff16436" .. L["CurseForge:"]     .. "|r", "https://www.curseforge.com/wow/addons/tankwatch")
+    urlField(-320, "|cffb371ff" .. L["Wago:"]           .. "|r", "https://addons.wago.io/addons/tankwatch")
 
     local cmdHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOPLEFT", 14, -290)
+    cmdHeader:SetPoint("TOPLEFT", 14, -380)
     cmdHeader:SetText(L["Slash commands"])
     cmdHeader:SetTextColor(1, 0.82, 0)
 
