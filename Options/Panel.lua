@@ -1422,8 +1422,10 @@ local function build()
     tinsert(UISpecialFrames, "TankWatchOptions")
 
     if panel.SetTitle then panel:SetTitle(L["TankWatch — Options"]) end
-    if panel.SetPortraitToAsset then
-        panel:SetPortraitToAsset("Interface\\AddOns\\TankWatch\\logo.png")
+    -- SetPortraitToAsset silently fails for non-square / non-standard PNGs in 12.0,
+    -- leaving a green placeholder. Set the texture directly on the portrait region.
+    if panel.PortraitContainer and panel.PortraitContainer.portrait then
+        panel.PortraitContainer.portrait:SetTexture("Interface\\AddOns\\TankWatch\\logo.png")
     end
 
     local pageHolder = CreateFrame("Frame", nil, panel)
