@@ -208,6 +208,32 @@ local function classColor(unit)
     return 0.5, 0.5, 0.5
 end
 
+-- Apply the bg fill (texture-tint or solid) using the chosen color mode.
+-- testClassKey is the hardcoded class name for test frames (no unit).
+local function applyBackgroundFill(f, db, unit, testClassKey)
+    if not f.healthBar or not f.healthBar.bg then return end
+    local bc
+    if db.backgroundColorMode == "CLASS" then
+        local r, g, b
+        if testClassKey then
+            local c = CLASS_COLORS[testClassKey] or { r = 0.5, g = 0.5, b = 0.5 }
+            r, g, b = c.r, c.g, c.b
+        else
+            r, g, b = classColor(unit)
+        end
+        bc = { r = r, g = g, b = b }
+    else
+        bc = db.healthBackgroundColor or { r = 0.1, g = 0.1, b = 0.1 }
+    end
+    local a = db.healthBackgroundAlpha or 0.35
+    local bgTex = db.healthBackgroundTexture
+    if db.useBackgroundTexture and bgTex and bgTex ~= "" then
+        f.healthBar.bg:SetVertexColor(bc.r, bc.g, bc.b, a)
+    else
+        f.healthBar.bg:SetColorTexture(bc.r, bc.g, bc.b, a)
+    end
+end
+
 -- ============================================================
 -- TEXT FORMATTERS
 -- ============================================================
@@ -342,8 +368,14 @@ local function ApplyLayout()
 
         if f.healthBar then
             f.healthBar:SetStatusBarTexture(hpTex)
+            -- Background texture: set the texture file once here; the actual
+            -- color/tint is applied per-unit in UpdateFrame / test settings
+            -- so CLASS mode can use the unit's class color.
             if f.healthBar.bg then
-                f.healthBar.bg:SetColorTexture(0.1, 0.1, 0.1, db.healthBackgroundAlpha or 0.35)
+                local bgTex = db.healthBackgroundTexture
+                if db.useBackgroundTexture and bgTex and bgTex ~= "" then
+                    f.healthBar.bg:SetTexture(TW:ResolveTexture(bgTex))
+                end
             end
         end
 
@@ -467,6 +499,7 @@ local function UpdateFrame(f)
         end
         f.healthBar:SetStatusBarColor(r, g, b)
     end
+    applyBackgroundFill(f, db, unit, nil)
 
     if TW.UpdateAuras then TW.UpdateAuras(f) end
 end
@@ -564,12 +597,15 @@ function TW:ToggleMover()
         m:RegisterForDrag("LeftButton")
         local fs = m:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         fs:SetPoint("CENTER")
-        fs:SetText("TankWatch")
+        fs:SetText("TankWatch  (RMB: lock)")
         m:SetScript("OnDragStart", function() container:SetMovable(true); container:StartMoving() end)
         m:SetScript("OnDragStop", function()
             container:StopMovingOrSizing()
             snapAndStore(container)
             ApplyLayout()
+        end)
+        m:SetScript("OnMouseDown", function(self, button)
+            if button == "RightButton" then TW:ToggleMover() end
         end)
         container._mover = m
     end
@@ -622,6 +658,7 @@ local function applyTestFrameSettings(f, idx)
         end
         f.healthBar:SetStatusBarColor(r, g, b)
     end
+    applyBackgroundFill(f, db, nil, cls)
 
     if f.healthText then
         if db.showHealthText then f.healthText:Show() else f.healthText:Hide() end

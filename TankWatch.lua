@@ -26,6 +26,10 @@ TW.Defaults = {
     -- Bars
     healthTexture = "Blizzard Raid Bar",
     healthBackgroundAlpha = 0.35,
+    healthBackgroundColor = { r = 0.1, g = 0.1, b = 0.1 },
+    backgroundColorMode   = "STATIC", -- "STATIC" | "CLASS"
+    useBackgroundTexture    = false,
+    healthBackgroundTexture = "Blizzard Raid Bar", -- LSM name when texture mode is on
     healthColorMode = "CLASS", -- CLASS | REACTION | STATIC
     healthStaticColor = { r = 0.2, g = 0.6, b = 0.2 },
 

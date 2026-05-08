@@ -119,6 +119,10 @@ L["Class color"]         = "Couleur de classe"
 L["Reaction (green)"]    = "Réaction (vert)"
 L["Custom static"]       = "Personnalisée"
 L["Custom color:"]       = "Couleur personnalisée :"
+L["Background color:"]      = "Couleur du fond :"
+L["Use textured background"] = "Utiliser une texture de fond"
+L["Background texture"]     = "Texture du fond"
+L["Background color mode"]  = "Mode couleur du fond"
 L["HP background alpha"] = "Alpha fond vie"
 
 -- Text

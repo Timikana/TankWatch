@@ -477,7 +477,70 @@ local function buildBarsPage(page)
     refreshSwatch()
 
     y = y - 50
+    makeDropdown(page, L["Background color mode"], "backgroundColorMode", {
+        { text = L["Custom static"], value = "STATIC" },
+        { text = L["Class color"],   value = "CLASS"  },
+    }, 14, y, 180)
+    y = y - 50
+    makeCheck(page, L["Use textured background"], "useBackgroundTexture", 14, y)
+    y = y - 26
+    makeMediaDropdown(page, L["Background texture"], "healthBackgroundTexture", "statusbar", 14, y, 180)
+    y = y - 50
     makeSlider(page, L["HP background alpha"], "healthBackgroundAlpha", 0, 1, 0.05, 14, y)
+
+    -- Background color swatch (same pattern as healthStaticColor)
+    local bgLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    bgLabel:SetPoint("TOPLEFT", page, "TOPLEFT", 320, y)
+    bgLabel:SetText(L["Background color:"])
+
+    local bgSwatch = CreateFrame("Button", "TWOpt_BgColor", page, "BackdropTemplate")
+    bgSwatch:SetSize(28, 22)
+    bgSwatch:SetPoint("TOPLEFT", bgLabel, "BOTTOMLEFT", 0, -2)
+    bgSwatch:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
+    })
+    bgSwatch:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+
+    local function refreshBgSwatch()
+        local c = TW:GetDB().healthBackgroundColor or { r = 0.1, g = 0.1, b = 0.1 }
+        bgSwatch:SetBackdropColor(c.r, c.g, c.b, 1)
+    end
+
+    bgSwatch:SetScript("OnClick", function()
+        local c = TW:GetDB().healthBackgroundColor or { r = 0.1, g = 0.1, b = 0.1 }
+        local r0, g0, b0 = c.r, c.g, c.b
+        local function commit(r, g, b)
+            local db = TW:GetDB()
+            db.healthBackgroundColor = { r = r, g = g, b = b }
+            refreshBgSwatch()
+            refresh()
+        end
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            ColorPickerFrame:SetupColorPickerAndShow({
+                r = r0, g = g0, b = b0,
+                hasOpacity = false, opacity = 1,
+                swatchFunc = function()
+                    local r, g, b = ColorPickerFrame:GetColorRGB()
+                    commit(r, g, b)
+                end,
+                cancelFunc = function() commit(r0, g0, b0) end,
+            })
+        else
+            ColorPickerFrame.func = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB()
+                commit(r, g, b)
+            end
+            ColorPickerFrame.cancelFunc = function() commit(r0, g0, b0) end
+            ColorPickerFrame:SetColorRGB(r0, g0, b0)
+            ColorPickerFrame.hasOpacity = false
+            ColorPickerFrame:Hide(); ColorPickerFrame:Show()
+        end
+    end)
+    bgSwatch.dbKey = "healthBackgroundColor"
+    bgSwatch.refresh = refreshBgSwatch
+    refreshBgSwatch()
+
     y = y - 50
     makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y)
     makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y)
