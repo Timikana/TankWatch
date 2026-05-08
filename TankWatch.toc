@@ -2,7 +2,7 @@
 ## Title: TankWatch
 ## Notes: Highlight tanks with their boss-cast debuffs and stack counts.
 ## Author: Timikana
-## Version: 1.0.4
+## Version: 1.1.0
 ## IconTexture: Interface\AddOns\TankWatch\Media\icon
 ## SavedVariables: TankWatchDB
 ## X-Curse-Project-ID: 1536671
