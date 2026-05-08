@@ -823,43 +823,53 @@ end
 
 -- ============================================================
 -- POPUP: name input (used by New / Copy)
+-- IMPORTANT: register popups LAZILY (inside ensurePopups, called on first
+-- panel build). Mutating the global StaticPopupDialogs at file load time
+-- triggers a persistent taint in WoW 12.0 that propagates to unrelated
+-- protected calls (e.g. UseContainerItem when clicking bag items).
 -- ============================================================
-StaticPopupDialogs = StaticPopupDialogs or {}
-StaticPopupDialogs["TANKWATCH_PROFILE_NAME"] = {
-    text         = "%s",
-    button1      = OKAY or "OK",
-    button2      = CANCEL or "Cancel",
-    hasEditBox   = true,
-    editBoxWidth = 240,
-    timeout      = 0,
-    whileDead    = true,
-    hideOnEscape = true,
-    OnShow       = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
-    OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
-    EditBoxOnEnterPressed = function(self)
-        local parent = self:GetParent()
-        if parent.data and parent.data.onAccept then parent.data.onAccept(self:GetText()) end
-        parent:Hide()
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-}
-
-StaticPopupDialogs["TANKWATCH_CONFIRM"] = {
-    text         = "%s",
-    button1      = YES or "Yes",
-    button2      = NO  or "No",
-    timeout      = 0,
-    whileDead    = true,
-    hideOnEscape = true,
-    OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept() end end,
-}
+local _popupsRegistered = false
+local function ensurePopups()
+    if _popupsRegistered then return end
+    StaticPopupDialogs = StaticPopupDialogs or {}
+    StaticPopupDialogs["TANKWATCH_PROFILE_NAME"] = {
+        text         = "%s",
+        button1      = OKAY or "OK",
+        button2      = CANCEL or "Cancel",
+        hasEditBox   = true,
+        editBoxWidth = 240,
+        timeout      = 0,
+        whileDead    = true,
+        hideOnEscape = true,
+        OnShow       = function(self) self.editBox:SetText(""); self.editBox:SetFocus() end,
+        OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept(self.editBox:GetText()) end end,
+        EditBoxOnEnterPressed = function(self)
+            local parent = self:GetParent()
+            if parent.data and parent.data.onAccept then parent.data.onAccept(self:GetText()) end
+            parent:Hide()
+        end,
+        EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+    }
+    StaticPopupDialogs["TANKWATCH_CONFIRM"] = {
+        text         = "%s",
+        button1      = YES or "Yes",
+        button2      = NO  or "No",
+        timeout      = 0,
+        whileDead    = true,
+        hideOnEscape = true,
+        OnAccept     = function(self) if self.data and self.data.onAccept then self.data.onAccept() end end,
+    }
+    _popupsRegistered = true
+end
 
 local function askName(prompt, onAccept)
+    ensurePopups()
     local d = StaticPopup_Show("TANKWATCH_PROFILE_NAME", prompt)
     if d then d.data = { onAccept = onAccept } end
 end
 
 local function askConfirm(prompt, onAccept)
+    ensurePopups()
     local d = StaticPopup_Show("TANKWATCH_CONFIRM", prompt)
     if d then d.data = { onAccept = onAccept } end
 end

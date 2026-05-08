@@ -29,21 +29,22 @@ local startRangeTicker
 -- TANK DETECTION
 -- ============================================================
 local function isMyTankSpec()
-    local spec = GetSpecialization and GetSpecialization()
-    if not spec then return false end
-    local role
-    if GetSpecializationRole then
-        local ok, r = pcall(GetSpecializationRole, spec)
-        if ok then role = r end
-    end
-    return role == "TANK"
+    local spec
+    pcall(function() spec = GetSpecialization and GetSpecialization() end)
+    if isSecret(spec) then return false end
+    if spec == nil then return false end
+    local r
+    pcall(function() r = GetSpecializationRole(spec) end)
+    if isSecret(r) then return false end
+    if r == nil then return false end
+    return r == "TANK"
 end
 
 local function alreadyContains(units, unit)
     for _, u in ipairs(units) do
         if u == unit then return true end -- same regular unit token
         local ok, same = pcall(UnitIsUnit, u, unit)
-        if ok and same ~= nil and not isSecret(same) and same == true then
+        if ok and not isSecret(same) and same == true then
             return true
         end
     end
@@ -52,14 +53,18 @@ end
 
 local function isTankByRole(unit)
     local ok, r = pcall(UnitGroupRolesAssigned, unit)
-    if not ok or r == nil or isSecret(r) then return false end
+    if not ok then return false end
+    if isSecret(r) then return false end -- ALWAYS check secret BEFORE any comparison
+    if r == nil then return false end
     return r == "TANK"
 end
 
 local function isMainTank(unit)
     if not GetPartyAssignment then return false end
     local ok, r = pcall(GetPartyAssignment, "MAINTANK", unit)
-    if not ok or r == nil or isSecret(r) then return false end
+    if not ok then return false end
+    if isSecret(r) then return false end
+    if r == nil then return false end
     return r == 1 or r == true
 end
 
@@ -153,7 +158,9 @@ local function collectTankUnits()
         local function tryAdd(unit)
             if not UnitExists(unit) or alreadyContains(units, unit) then return end
             local ok, name = pcall(UnitName, unit)
-            if not ok or not name or isSecret(name) then return end
+            if not ok then return end
+            if isSecret(name) then return end -- can't lower-case a secret string
+            if name == nil then return end
             if lower[name:lower()] then
                 units[#units + 1] = unit
             end
@@ -300,6 +307,19 @@ local function ApplyLayout()
     container:ClearAllPoints()
     container:SetPoint(anchor, UIParent, anchor, db.anchorX or 0, db.anchorY or 0)
 
+    -- Resize the container to match the actual visible content so that the
+    -- mover overlay (which uses :SetAllPoints(container)) covers exactly
+    -- the tank frames and not extra empty space below.
+    local shownCount = 0
+    for i = 1, MAX_TANKS do
+        local f = TW.TankFrames[i]
+        if f and (f._unit or f._testMode) then shownCount = shownCount + 1 end
+    end
+    local h = (shownCount > 0)
+        and (shownCount * db.frameHeight + (shownCount - 1) * db.frameSpacing)
+        or db.frameHeight
+    container:SetSize(db.frameWidth, h)
+
     local hpTex = TW:ResolveTexture(db.healthTexture)
 
     for i = 1, MAX_TANKS do
@@ -359,13 +379,17 @@ local function UpdateFrame(f)
     if f.nameText then
         if db.showName then
             local ok, name = pcall(UnitName, unit)
-            if not ok or not name then name = "?" end
-            -- Don't compute length on a secret string (#secret taints).
-            if not isSecret(name) then
+            if not ok then name = "?" end
+            -- Order matters: isSecret check BEFORE any nil/truthy comparison.
+            if isSecret(name) then
+                -- Pass secret strings directly to SetText (per Cell pattern).
+                f.nameText:SetText(name)
+            else
+                if name == nil then name = "?" end
                 local maxLen = db.nameMaxLength or 0
                 if maxLen > 0 and #name > maxLen then name = name:sub(1, maxLen) end
+                f.nameText:SetText(name)
             end
-            f.nameText:SetText(name)
             f.nameText:Show()
         else
             f.nameText:Hide()
@@ -383,26 +407,32 @@ local function UpdateFrame(f)
         cur = UnitHealth(unit)
         max = UnitHealthMax(unit) or 0
     end)
-    if f.healthBar and max and max > 0 then
+    -- Bar value: SetValue accepts secret values. Order all secret-checks
+    -- BEFORE any nil/inequality comparison to avoid taint.
+    if f.healthBar and not isSecret(max) and max and max > 0 then
         f.healthBar:SetMinMaxValues(0, max)
-        if cur ~= nil then
+        if isSecret(cur) then
             pcall(f.healthBar.SetValue, f.healthBar, cur)
+        elseif cur ~= nil then
+            f.healthBar:SetValue(cur)
         else
             f.healthBar:SetValue(0)
         end
     end
+
+    -- HP text. Restructured so we never compare a secret to nil.
     if f.healthText then
-        if db.showHealthText and cur ~= nil and max and max > 0 then
-            -- Migrate legacy PERCENT / CURRENT_PERCENT (no longer feasible
-            -- on live units in 12.0) to CURRENT.
+        if not db.showHealthText then
+            f.healthText:Hide()
+        elseif isSecret(max) or not max or max <= 0 then
+            f.healthText:Hide()
+        else
             local fmt = db.healthTextFormat
             if fmt == "PERCENT" or fmt == "CURRENT_PERCENT" or not fmt then
                 fmt = "CURRENT"
                 db.healthTextFormat = fmt
             end
-            if not isSecret(cur) and not isSecret(max) then
-                f.healthText:SetText(formatHP(cur, max, fmt))
-            else
+            if isSecret(cur) then
                 local curStr
                 if AbbreviateNumbers then
                     pcall(function() curStr = AbbreviateNumbers(cur) end)
@@ -411,13 +441,16 @@ local function UpdateFrame(f)
                 if fmt == "CURRENT_MAX" then
                     local maxStr = AbbreviateNumbers and AbbreviateNumbers(max) or tostring(max)
                     f.healthText:SetText(curStr .. " / " .. maxStr)
-                else -- CURRENT
+                else
                     f.healthText:SetText(curStr)
                 end
+                f.healthText:Show()
+            elseif cur == nil then
+                f.healthText:Hide()
+            else
+                f.healthText:SetText(formatHP(cur, max, fmt))
+                f.healthText:Show()
             end
-            f.healthText:Show()
-        else
-            f.healthText:Hide()
         end
     end
 

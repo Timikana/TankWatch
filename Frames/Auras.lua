@@ -19,25 +19,18 @@ local function isSecret(v)
     return false
 end
 
--- Robust HARMFUL aura iteration. Tries AuraUtil.ForEachAura first; falls
--- back to C_UnitAuras.GetAuraDataByIndex if it throws.
+-- HARMFUL aura iteration. We skip AuraUtil.ForEachAura entirely because in
+-- 12.0 it throws on raid units and the C-side error appears to leak taint
+-- past pcall. C_UnitAuras.GetAuraDataByIndex is the safe path.
 local function iterHarmful(unit, max, callback)
-    if AuraUtil and AuraUtil.ForEachAura then
-        local ok = pcall(function()
-            AuraUtil.ForEachAura(unit, "HARMFUL", max, callback)
-        end)
-        if ok then return "ForEachAura" end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
+    for i = 1, max do
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+        if not ok or not aura then break end
+        local stop = callback(aura)
+        if stop then break end
     end
-    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        for i = 1, max do
-            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
-            if not ok or not aura then break end
-            local stop = callback(aura)
-            if stop then break end
-        end
-        return "GetAuraDataByIndex"
-    end
-    return nil
+    return "GetAuraDataByIndex"
 end
 
 -- ============================================================
@@ -172,13 +165,13 @@ end
 -- ============================================================
 -- Returns the spellId only if it's a non-secret regular value. Secret
 -- spellIds are unusable (can't index user tables), treat as nil.
--- Order matters: isSecret check BEFORE any comparison, since `secret == nil`
--- itself can taint.
+-- Order matters: isSecret check BEFORE the nil comparison, since
+-- `secret == nil` itself taints in 12.0.
 local function getSpellID(aura)
     local sid
     pcall(function() sid = aura.spellId end)
-    if sid == nil then return nil end
     if isSecret(sid) then return nil end
+    if sid == nil then return nil end
     return sid
 end
 
@@ -201,11 +194,10 @@ local function passesFilter(aura, db)
     -- from a hostile NPC (boss, mob, environment).
     local fromMe
     pcall(function() fromMe = aura.isFromPlayerOrPlayerPet end)
-    if fromMe == nil or isSecret(fromMe) then
-        -- Fallback: if isBossAura is somehow available and non-secret, use it
+    if isSecret(fromMe) or fromMe == nil then
         local isBoss
         pcall(function() isBoss = aura.isBossAura end)
-        if isBoss == nil or isSecret(isBoss) then return false end
+        if isSecret(isBoss) or isBoss == nil then return false end
         return isBoss == true
     end
     return fromMe == false
@@ -232,7 +224,7 @@ function TW.UpdateAuras(frame)
             -- we let the aura through.
             if db.aurasOnlyStacks then
                 local stacks = getStacks(aura)
-                if stacks == nil or isSecret(stacks) or stacks <= 1 then
+                if isSecret(stacks) or stacks == nil or stacks <= 1 then
                     return
                 end
             end
@@ -245,10 +237,16 @@ function TW.UpdateAuras(frame)
         local b = frame._auras[i]
         local aura = found[i]
         if aura then
-            -- Icon: SetTexture accepts secret values safely (Cell pattern)
+            -- Icon: SetTexture accepts secret values safely (Cell pattern).
+            -- Pass directly via pcall — never evaluate truthiness of a
+            -- possibly-secret value (`if icon then` would taint).
             local icon
             pcall(function() icon = aura.icon end)
-            if icon then b.icon:SetTexture(icon) end
+            if isSecret(icon) then
+                pcall(b.icon.SetTexture, b.icon, icon)
+            elseif icon ~= nil then
+                b.icon:SetTexture(icon)
+            end
 
             -- auraInstanceID is a non-secret regular value, used to call
             -- the Blizzard secret-aware aura APIs.
@@ -259,21 +257,23 @@ function TW.UpdateAuras(frame)
             -- (DandersFrames pattern). Returns "" below min, the count, or
             -- "*" above max — already a display-ready string.
             local stackTxt
-            if instId and not isSecret(instId)
+            if not isSecret(instId) and instId
                and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
                 pcall(function()
                     stackTxt = C_UnitAuras.GetAuraApplicationDisplayCount(
                         frame._unit, instId, 2, 99)
                 end)
             end
-            if stackTxt then
+            if isSecret(stackTxt) then
+                pcall(b.stacks.SetText, b.stacks, stackTxt)
+            elseif stackTxt ~= nil then
                 b.stacks:SetText(stackTxt)
             else
                 local stacks = getStacks(aura)
-                if stacks == nil then
-                    b.stacks:SetText("")
-                elseif isSecret(stacks) then
+                if isSecret(stacks) then
                     b.stacks:SetText("?")
+                elseif stacks == nil then
+                    b.stacks:SetText("")
                 elseif stacks > 1 then
                     b.stacks:SetText(tostring(stacks))
                 else
@@ -288,22 +288,22 @@ function TW.UpdateAuras(frame)
             pcall(function() dur = aura.duration end)
             pcall(function() exp = aura.expirationTime end)
 
-            if dur and exp and not isSecret(dur) and not isSecret(exp)
-               and dur > 0 and exp > 0 then
+            if not isSecret(dur) and not isSecret(exp)
+               and dur and exp and dur > 0 and exp > 0 then
                 b.cd:SetHideCountdownNumbers(true)
                 b.cd:SetCooldown(exp - dur, dur)
                 b.timer:SetText(formatTime(exp - GetTime()))
-            elseif instId and not isSecret(instId)
+            elseif not isSecret(instId) and instId
                    and C_UnitAuras and C_UnitAuras.GetAuraDuration
                    and b.cd.SetCooldownFromDurationObject then
                 local durObj
                 local ok = pcall(function()
                     durObj = C_UnitAuras.GetAuraDuration(frame._unit, instId)
                 end)
-                if ok and durObj then
-                    b.cd:SetHideCountdownNumbers(false) -- Blizzard's countdown handles secrets
+                if ok and durObj ~= nil and not isSecret(durObj) then
+                    b.cd:SetHideCountdownNumbers(false)
                     b.cd:SetCooldownFromDurationObject(durObj)
-                    b.timer:SetText("") -- our font hides; native countdown takes over
+                    b.timer:SetText("")
                 else
                     b.cd:Clear()
                     b.timer:SetText("")
