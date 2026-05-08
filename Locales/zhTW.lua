@@ -11,3 +11,5 @@ L["Auras"]    = "光環"
 L["Filters"]  = "過濾"
 L["Profiles"] = "設定檔"
 L["About"]    = "關於"
+
+L["Profile '%s' already exists. Overwrite?"] = "設定檔 '%s' 已存在，是否覆蓋？"

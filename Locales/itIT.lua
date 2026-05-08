@@ -11,3 +11,5 @@ L["Auras"]    = "Aure"
 L["Filters"]  = "Filtri"
 L["Profiles"] = "Profili"
 L["About"]    = "Info"
+
+L["Profile '%s' already exists. Overwrite?"] = "Il profilo '%s' esiste già. Sovrascrivere?"
