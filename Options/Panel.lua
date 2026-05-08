@@ -1308,16 +1308,23 @@ local function buildProfilesPage(page)
         askName(L["Name for the imported profile:"], function(name)
             name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
             if name == "" then return end
-            local ok, err = TW:ImportProfile(name, raw)
-            if ok then
-                TW:SetActiveProfile(name)
-                profileDropdownRefresh()
-                refreshExport()
-                if panel and panel.refreshAll then panel.refreshAll() end
-                print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' imported"], name))
-            else
-                print("|cff00ff96TankWatch:|r " .. L["import failed:"] .. " " .. tostring(err))
+            local function doImport(overwrite)
+                local ok, err = TW:ImportProfile(name, raw, overwrite)
+                if ok then
+                    TW:SetActiveProfile(name)
+                    profileDropdownRefresh()
+                    refreshExport()
+                    if panel and panel.refreshAll then panel.refreshAll() end
+                    print("|cff00ff96TankWatch:|r " .. format(L["profile '%s' imported"], name))
+                elseif err == "exists" then
+                    askConfirm(format(L["Profile '%s' already exists. Overwrite?"], name), function()
+                        doImport(true)
+                    end)
+                else
+                    print("|cff00ff96TankWatch:|r " .. L["import failed:"] .. " " .. tostring(err))
+                end
             end
+            doImport(false)
         end)
     end)
     addTooltip(btnImport, L["Decode the export string and create a new profile from it."])

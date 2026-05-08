@@ -298,7 +298,7 @@ function TW:ExportProfile(name)
     return "TW2!" .. b64encode(serialize(p))
 end
 
-function TW:ImportProfile(name, str)
+function TW:ImportProfile(name, str, overwrite)
     if not str or str == "" then return false, "empty" end
     str = str:gsub("^%s+", ""):gsub("%s+$", "")
     local body
@@ -318,6 +318,7 @@ function TW:ImportProfile(name, str)
     name = name and name:gsub("^%s+", ""):gsub("%s+$", "")
     if not name or name == "" then return false, "empty name" end
     local root = ensureRoot()
+    if root.profiles[name] and not overwrite then return false, "exists" end
     seedDefaults(result)
     root.profiles[name] = result
     return true

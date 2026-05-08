@@ -26,6 +26,7 @@ L["cannot delete Default"]                       = "impossible de supprimer Defa
 L["profile '%s' created"]                        = "profil '%s' créé"
 L["profile '%s' imported"]                       = "profil '%s' importé"
 L["import failed:"]                              = "échec de l'import :"
+L["Profile '%s' already exists. Overwrite?"]     = "Le profil '%s' existe déjà. Écraser ?"
 L["import box is empty"]                         = "la zone d'import est vide"
 L["Export"]                                      = "Exporter"
 L["Import"]                                      = "Importer"
