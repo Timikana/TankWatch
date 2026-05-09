@@ -15,6 +15,9 @@ desktop.ini
 .claude.local/
 CLAUDE.md
 
+# Secrets — Discord support server
+.env
+
 # WoW addon build / packager
 .release/
 .pkgmeta.local
