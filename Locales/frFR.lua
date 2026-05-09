@@ -233,6 +233,9 @@ L["Color mode"] = "Mode de couleur"
 L["Static color"]      = "Couleur statique"
 L["Background color"]  = "Couleur de fond"
 L["Panel opacity"]     = "Opacité du panneau"
+L["Health bar"]        = "Barre de vie"
+L["Icons"]             = "Icônes"
+L["Options window"]    = "Fenêtre d'options"
 L["alias"]             = "alias"
 
 -- Layout tooltips
