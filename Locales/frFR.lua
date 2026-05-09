@@ -181,6 +181,8 @@ L["GitHub repo:"]   = "Dépôt GitHub :"
 L["Report a bug:"]  = "Signaler un problème :"
 L["CurseForge:"]    = "CurseForge :"
 L["Wago:"]          = "Wago :"
+L["Discord:"]       = "Discord :"
+L["Discord (support / bugs / suggestions):"] = "Discord (support / bugs / suggestions) :"
 L["Click a field above and Ctrl+C to copy."] = "Clique un champ ci-dessus puis Ctrl+C pour copier."
 L["open options"]   = "ouvrir les options"
 
