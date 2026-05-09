@@ -612,30 +612,6 @@ local function buildLayoutPage(page)
     }, 14, y, 220), "v1.x_visibilityMode"),
         L["When TankWatch frames are visible: only in raid, in any group, or always."])
 
-    -- Panel opacity slider (account-wide)
-    local alphaSlider = CreateFrame("Frame", nil, page, "MinimalSliderWithSteppersTemplate")
-    alphaSlider:SetWidth(220)
-    alphaSlider:SetPoint("TOPLEFT", page, "TOPLEFT", 260, y + 18)
-    local function fmtPct(v) return string.format("%d%%", math.floor(v * 100 + 0.5)) end
-    local alphaFormatters = {
-        [MinimalSliderWithSteppersMixin.Label.Min] = function() return "20%" end,
-        [MinimalSliderWithSteppersMixin.Label.Max] = function() return "100%" end,
-        [MinimalSliderWithSteppersMixin.Label.Top] = function(v)
-            return L["Panel opacity"] .. ": " .. fmtPct(v)
-        end,
-    }
-    TankWatchDB = TankWatchDB or {}
-    if TankWatchDB.panelAlpha == nil then TankWatchDB.panelAlpha = 0.8 end
-    alphaSlider:Init(TankWatchDB.panelAlpha, 0.2, 1.0, 16, alphaFormatters)
-    local alphaEvent = (MinimalSliderWithSteppersMixin.Event
-        and MinimalSliderWithSteppersMixin.Event.OnValueChanged) or "OnValueChanged"
-    alphaSlider:RegisterCallback(alphaEvent, function(_, v)
-        v = math.floor(v * 20 + 0.5) / 20
-        TankWatchDB.panelAlpha = v
-        if panel then panel:SetAlpha(v) end
-    end, alphaSlider)
-    addTooltip(alphaSlider, L["Opacity of this options window. Saved account-wide."])
-
     -- ============ POSITION ============
     y = y - 60
     makeSection(page, L["Position"], 14, y); y = y - 24
@@ -665,19 +641,24 @@ local function buildLayoutPage(page)
         L["Vertical gap between stacked tank frames."])
     addTooltip(makeSlider(page, L["Scale"],  "frameScale", 0.5, 2.0, 0.05, 260, y),
         L["Overall scale of all tank frames."])
+
+    -- ============ RANGE FADE (moved from Bars) ============
+    y = y - 60
+    makeSection(page, L["Range Fade"], 14, y); y = y - 24
+    addTooltip(makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y),
+        L["Reduce the alpha of tank frames whose unit is out of 40-yard range."])
+    addTooltip(makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y),
+        L["Alpha applied to out-of-range tank frames."])
 end
 
 local function buildBarsPage(page)
     local y = -8
 
-    -- ============ TEXTURES ============
-    makeSection(page, L["Textures"], 14, y); y = y - 24
+    -- ============ HEALTH BAR (texture + color, merged) ============
+    makeSection(page, L["Health bar"], 14, y); y = y - 24
     addTooltip(makeMediaDropdown(page, L["Health Texture"], "healthTexture", "statusbar", 14, y, 180),
         L["Status bar texture used for the tank health bar."])
-
-    -- ============ HEALTH COLOR ============
-    y = y - 60
-    makeSection(page, L["Health Color"], 14, y); y = y - 24
+    y = y - 56
     addTooltip(makeDropdown(page, L["Color mode"], "healthColorMode", {
         { text = L["Class color"],      value = "CLASS" },
         { text = L["Reaction (green)"], value = "REACTION" },
@@ -724,14 +705,6 @@ local function buildBarsPage(page)
         { text = L["Left"],  value = "LEFT" },
     }, 14, y, 160), "v1.2_absorbBarSide"),
         L["Which side of the bar the shield grows from."])
-
-    -- ============ RANGE FADE ============
-    y = y - 60
-    makeSection(page, L["Range Fade"], 14, y); y = y - 24
-    addTooltip(makeCheck(page, L["Fade out-of-range tanks"], "rangeFadeEnabled", 14, y),
-        L["Reduce the alpha of tank frames whose unit is out of 40-yard range."])
-    addTooltip(makeSlider(page, L["Out-of-range alpha"], "rangeFadeAlpha", 0.05, 1, 0.05, 260, y),
-        L["Alpha applied to out-of-range tank frames."])
 end
 
 local function buildTextPage(page)
@@ -808,8 +781,8 @@ local function buildAurasPage(page)
     note:SetText(L["By default only boss-cast HARMFUL auras show. Use the Filters tab to whitelist M+ debuffs or blacklist noise."])
     y = y - 32
 
-    -- ============ SIZE ============
-    makeSection(page, L["Size"], 14, y); y = y - 24
+    -- ============ ICONS (size + layout merged) ============
+    makeSection(page, L["Icons"], 14, y); y = y - 24
     addTooltip(makeSlider(page, L["Max Count"], "aurasMaxCount", 1, 10, 1, 14, y),
         L["Maximum number of debuff icons shown per tank frame."])
     addTooltip(makeSlider(page, L["Size"], "aurasSize", 16, 64, 1, 260, y),
@@ -817,10 +790,7 @@ local function buildAurasPage(page)
     y = y - 56
     addTooltip(makeSlider(page, L["Spacing"], "aurasSpacing", 0, 12, 1, 14, y),
         L["Gap between debuff icons in pixels."])
-
-    -- ============ LAYOUT ============
-    y = y - 60
-    makeSection(page, L["Layout"], 14, y); y = y - 24
+    y = y - 56
     addTooltip(makeDropdown(page, L["Anchor"], "aurasAnchor", ANCHOR9(), 14, y),
         L["Where the debuff row attaches on the tank frame."])
     addTooltip(makeDropdown(page, L["Grow X"], "aurasGrowX", {
@@ -1403,8 +1373,38 @@ local function buildAboutPage(page)
     urlField(-320, "|cffb371ff" .. L["Wago:"]           .. "|r", "https://addons.wago.io/addons/tankwatch")
     urlField(-370, "|cff5865f2" .. L["Discord (support / bugs / suggestions):"] .. "|r", "https://discord.gg/uFmxwexQ4P")
 
+    -- Panel opacity slider (account-wide; lives on About since it's a meta-setting
+    -- about the options window itself, not the tank frames).
+    local alphaHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    alphaHeader:SetPoint("TOPLEFT", 14, -425)
+    alphaHeader:SetText(L["Options window"])
+    alphaHeader:SetTextColor(1, 0.82, 0)
+
+    local alphaSlider = CreateFrame("Frame", nil, page, "MinimalSliderWithSteppersTemplate")
+    alphaSlider:SetWidth(280)
+    alphaSlider:SetPoint("TOPLEFT", page, "TOPLEFT", 14, -445)
+    local function fmtPct(v) return string.format("%d%%", math.floor(v * 100 + 0.5)) end
+    local alphaFormatters = {
+        [MinimalSliderWithSteppersMixin.Label.Min] = function() return "20%" end,
+        [MinimalSliderWithSteppersMixin.Label.Max] = function() return "100%" end,
+        [MinimalSliderWithSteppersMixin.Label.Top] = function(v)
+            return L["Panel opacity"] .. ": " .. fmtPct(v)
+        end,
+    }
+    TankWatchDB = TankWatchDB or {}
+    if TankWatchDB.panelAlpha == nil then TankWatchDB.panelAlpha = 0.8 end
+    alphaSlider:Init(TankWatchDB.panelAlpha, 0.2, 1.0, 16, alphaFormatters)
+    local alphaEvent = (MinimalSliderWithSteppersMixin.Event
+        and MinimalSliderWithSteppersMixin.Event.OnValueChanged) or "OnValueChanged"
+    alphaSlider:RegisterCallback(alphaEvent, function(_, v)
+        v = math.floor(v * 20 + 0.5) / 20
+        TankWatchDB.panelAlpha = v
+        if panel then panel:SetAlpha(v) end
+    end, alphaSlider)
+    addTooltip(alphaSlider, L["Opacity of this options window. Saved account-wide."])
+
     local cmdHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOPLEFT", 14, -430)
+    cmdHeader:SetPoint("TOPLEFT", 14, -510)
     cmdHeader:SetText(L["Slash commands"])
     cmdHeader:SetTextColor(1, 0.82, 0)
 
