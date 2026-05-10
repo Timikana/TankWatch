@@ -7,6 +7,15 @@ TW.TankFrames = {}
 TW.TankContainer = nil
 
 -- ============================================================
+-- CLIENT SHIMS
+--   C_AddOns is retail-only (Midnight 12.0 / Dragonflight). On MoP
+--   Classic 5.5 these live as globals — fall back when the namespace
+--   isn't present.
+-- ============================================================
+TW.GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
+TW.IsAddOnLoaded    = (C_AddOns and C_AddOns.IsAddOnLoaded)    or _G.IsAddOnLoaded
+
+-- ============================================================
 -- DEFAULTS
 -- ============================================================
 TW.Defaults = {
@@ -495,7 +504,7 @@ TW.L = setmetatable({}, { __index = function(_, k) return k end })
 -- ============================================================
 -- SLASH
 -- ============================================================
-SLASH_TANKWATCH1 = "/tw"
+SLASH_TANKWATCH1 = "/tankw"
 SLASH_TANKWATCH2 = "/tankwatch"
 SlashCmdList["TANKWATCH"] = function(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
@@ -518,12 +527,12 @@ SlashCmdList["TANKWATCH"] = function(msg)
     else
         local L = TW.L
         print("|cff00ff96TankWatch:|r " .. L["commands:"])
-        print("  /tw            - " .. L["open options"])
-        print("  /tw mover      - " .. L["toggle mover"])
-        print("  /tw test N     - " .. L["simulate N tanks (0-8)"])
-        print("  /tw reset      - " .. L["reset all settings + reload"])
-        print("  /tw debug      - " .. L["print roster role/maintank info"])
-        print("  /tw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
+        print("  /tankw            - " .. L["open options"])
+        print("  /tankw mover      - " .. L["toggle mover"])
+        print("  /tankw test N     - " .. L["simulate N tanks (0-8)"])
+        print("  /tankw reset      - " .. L["reset all settings + reload"])
+        print("  /tankw debug      - " .. L["print roster role/maintank info"])
+        print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
     end
 end
 
@@ -646,6 +655,13 @@ init:SetScript("OnEvent", function()
     if TW.RegisterBlizzardSettings then TW:RegisterBlizzardSettings() end
     if TW.CreateMinimapButton then TW:CreateMinimapButton() end
     if TW.RegisterLDB then TW:RegisterLDB() end
-    print(format(TW.L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tw|r for options"],
-        C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"))
+    print(format(TW.L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"],
+        (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Version")) or "?"))
+    -- Classic-era beta notice. WOW_PROJECT_ID == WOW_PROJECT_MAINLINE on
+    -- retail; anything else (MoP/Cata/Wrath/Era) means a Classic client.
+    if WOW_PROJECT_ID and WOW_PROJECT_ID ~= (WOW_PROJECT_MAINLINE or 1) then
+        print("|cff00ff96TankWatch:|r " ..
+            (TW.L["Classic build — UI not fully tested. Report issues on GitHub / Discord."]
+             or "Classic build — UI not fully tested. Report issues on GitHub / Discord."))
+    end
 end)

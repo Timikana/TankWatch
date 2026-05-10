@@ -69,7 +69,13 @@ local function isMyTankSpec()
     if isSecret(spec) then return false end
     if spec == nil then return false end
     local r
-    pcall(function() r = GetSpecializationRole(spec) end)
+    if GetSpecializationRole then
+        pcall(function() r = GetSpecializationRole(spec) end)
+    end
+    -- MoP Classic has GetSpecializationInfo(specIndex) returning role at idx 5
+    if (r == nil or r == "") and GetSpecializationInfo then
+        pcall(function() local _, _, _, _, role = GetSpecializationInfo(spec); r = role end)
+    end
     if isSecret(r) then return false end
     if r == nil then return false end
     return r == "TANK"
@@ -90,8 +96,17 @@ local function isTankByRole(unit)
     local ok, r = pcall(UnitGroupRolesAssigned, unit)
     if not ok then return false end
     if isSecret(r) then return false end -- ALWAYS check secret BEFORE any comparison
-    if r == nil then return false end
-    return r == "TANK"
+    if r == "TANK" then return true end
+    -- Classic-era fallback: UnitGroupRolesAssigned often returns "NONE" or ""
+    -- on Classic clients (role isn't auto-derived from spec like on retail).
+    -- For the player itself we can read the spec role directly. Other party
+    -- members would need an Inspect — skip; users can rely on /maintank.
+    if r == nil or r == "" or r == "NONE" then
+        local isPlayer
+        pcall(function() isPlayer = UnitIsUnit(unit, "player") end)
+        if isPlayer == true and isMyTankSpec() then return true end
+    end
+    return false
 end
 
 local function isMainTank(unit)
@@ -111,6 +126,17 @@ end
 
 function TW:PrintRosterDebug()
     print("|cff00ff96TankWatch:|r " .. (TW.L and TW.L["roster diagnostic:"] or "roster diagnostic:"))
+    -- Spec/role detection summary for the player (Classic fallback path)
+    local spec, specName, specRole, gsr
+    pcall(function() spec = GetSpecialization and GetSpecialization() end)
+    if spec and GetSpecializationInfo then
+        pcall(function() local _, n, _, _, role = GetSpecializationInfo(spec); specName, specRole = n, role end)
+    end
+    if spec and GetSpecializationRole then
+        pcall(function() gsr = GetSpecializationRole(spec) end)
+    end
+    print(string.format("  player spec: |cffffff00idx=%s|r |cffffffffname=%s|r role(SpecInfo)=|cffffff00%s|r role(SpecRole)=|cffffff00%s|r isMyTankSpec()=|cffffff00%s|r",
+        tostring(spec), tostring(specName), tostring(specRole), tostring(gsr), tostring(isMyTankSpec())))
     local function dump(u)
         if not UnitExists(u) then return end
         local name = "?"
@@ -168,7 +194,15 @@ local function collectTankUnits()
             end
         end
     else
-        if isTankUnit("player", mode) then units[#units + 1] = "player" end
+        -- Solo. With visibilityMode = "ALWAYS" the user explicitly opted in
+        -- to seeing the frame outside groups — show them even when role
+        -- detection fails (Classic has no LFG role autodetect, and
+        -- GetSpecialization returns nil on some MoP Classic builds).
+        if vis == "ALWAYS" then
+            units[#units + 1] = "player"
+        elseif isTankUnit("player", mode) or isMyTankSpec() then
+            units[#units + 1] = "player"
+        end
     end
 
     -- Force-include self if my spec is tank (RL forgot to assign me)
@@ -555,9 +589,12 @@ local function UpdateFrame(f)
     -- Compact mode forces name/text/bars hidden regardless of individual toggles
     local compact = db.compactMode and true or false
 
-    -- Class icon update (compact only)
+    -- Class icon update (compact only). pcall(UnitClass) returns
+    -- (success, localizedClass, englishClass) — we want the English token
+    -- (3rd return) since CLASS_ICON_COORDS is keyed by "WARRIOR" / "PALADIN" etc.
     if f.classIcon and compact and db.showClassIcon then
-        local _, cls = pcall(UnitClass, unit)
+        local ok, _, cls = pcall(UnitClass, unit)
+        if not ok then cls = nil end
         if isSecret(cls) then cls = nil end
         if type(cls) == "string" and CLASS_ICON_COORDS[cls] then
             local c = CLASS_ICON_COORDS[cls]
@@ -748,6 +785,10 @@ local function RefreshAll()
     if not TW.TankContainer then return end
     ApplyLayout()
     if TW.ApplyFonts then TW:ApplyFonts() end
+    -- Re-evaluate the unit list — visibilityMode / tankDetection / forceInclude*
+    -- are read inside collectTankUnits, so a settings change must walk that
+    -- path again or stale frames stay visible.
+    if TW.RefreshTanks then TW:RefreshTanks() end
     for i = 1, MAX_TANKS do
         local f = TW.TankFrames[i]
         if f and f:IsShown() then

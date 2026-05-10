@@ -834,11 +834,9 @@ local function makeTab(parent, id, label, prevTab)
     tab:SetText(label)
     tab.id = id
     if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end
-    if prevTab then
-        tab:SetPoint("LEFT", prevTab, "RIGHT", 4, 0)
-    else
-        tab:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 10, 2)
-    end
+    -- Layout/anchor is handled by layoutTabs() at panel build time and on
+    -- OnSizeChanged so the tab strip wraps onto multiple rows when the
+    -- panel is too narrow to fit them all in a single row.
     return tab
 end
 
@@ -1786,6 +1784,26 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.2
+
+|cffffd700New|r — Slash command renamed: /tankw (with /tankwatch alias)
+- /tw was too short and risked colliding with other addons; same
+  convention as BossWatch's /bossw.
+
+|cffffd700New|r — Multi-row tab strip
+- When the panel is too narrow to fit every tab in one row, the strip
+  wraps onto multiple rows. Bottom rows render above the rows above
+  so tab top edges aren't clipped.
+
+|cffffd700New|r — MoP Classic 5.5 support
+- TankWatch now runs on Mists of Pandaria Classic via a separate TOC
+  (Interface 50500). One CurseForge zip ships both retail and Classic.
+- C_UnitAuras isn't available on Classic, so debuff scanning falls back
+  to the legacy UnitAura API — boss-cast debuff display works the same
+  on both clients.
+- C_AddOns.GetAddOnMetadata / IsAddOnLoaded fall back to the legacy
+  globals so the version label and the BossWatch sister-tab work too.
+
 ## v1.4.1
 
 |cffffd700New|r — Sister-addon side tabs
@@ -2013,8 +2031,9 @@ local function buildChangelogPage(page)
 end
 
 local function buildAboutPage(page)
-    local version = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
-    local author  = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Author")  or "Timikana"
+    local meta = TW.GetAddOnMetadata
+    local version = (meta and meta(addonName, "Version")) or "?"
+    local author  = (meta and meta(addonName, "Author"))  or "Timikana"
 
     -- Logo (top left)
     local logo = page:CreateTexture(nil, "ARTWORK")
@@ -2031,6 +2050,17 @@ local function buildAboutPage(page)
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     sub:SetWidth(380); sub:SetJustifyH("LEFT")
     sub:SetText(L["See every tank in your group with their boss-cast debuffs and stack counts."])
+
+    -- Classic-build notice (only shown on non-retail clients)
+    if WOW_PROJECT_ID and WOW_PROJECT_ID ~= (WOW_PROJECT_MAINLINE or 1) then
+        local notice = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        notice:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -10)
+        notice:SetWidth(380); notice:SetJustifyH("LEFT")
+        notice:SetTextColor(1, 0.6, 0)
+        notice:SetText("|cffff9900⚠ " ..
+            (L["Classic build — UI not fully tested. Report issues on GitHub / Discord."]
+             or "Classic build — UI not fully tested. Report issues on GitHub / Discord.") .. "|r")
+    end
 
     local byLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     byLabel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -16)
@@ -2100,15 +2130,15 @@ local function buildAboutPage(page)
     cmds:SetPoint("TOPLEFT", cmdHeader, "BOTTOMLEFT", 0, -6)
     cmds:SetWidth(560); cmds:SetJustifyH("LEFT"); cmds:SetSpacing(3)
     cmds:SetText(
-        "|cffffff00/tw|r — " .. L["open options"] .. "\n" ..
-        "|cffffff00/tw config|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
-        "|cffffff00/tw options|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
-        "|cffffff00/tw mover|r — " .. L["toggle mover"] .. "\n" ..
-        "|cffffff00/tw test N|r — " .. L["simulate N tanks (0-8)"] .. "\n" ..
-        "|cffffff00/tw reset|r — " .. L["reset all settings + reload"] .. "\n" ..
-        "|cffffff00/tw debug|r — " .. L["print roster role/maintank info"] .. "\n" ..
-        "|cffffff00/tw auradebug|r — " .. L["print every HARMFUL aura on each tank unit"] .. "\n" ..
-        "|cffffff00/tankwatch|r — " .. L["long alias for /tw"]
+        "|cffffff00/tankw|r — " .. L["open options"] .. "\n" ..
+        "|cffffff00/tankw config|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
+        "|cffffff00/tankw options|r |cff888888(" .. L["alias"] .. ")|r — " .. L["open options"] .. "\n" ..
+        "|cffffff00/tankw mover|r — " .. L["toggle mover"] .. "\n" ..
+        "|cffffff00/tankw test N|r — " .. L["simulate N tanks (0-8)"] .. "\n" ..
+        "|cffffff00/tankw reset|r — " .. L["reset all settings + reload"] .. "\n" ..
+        "|cffffff00/tankw debug|r — " .. L["print roster role/maintank info"] .. "\n" ..
+        "|cffffff00/tankw auradebug|r — " .. L["print every HARMFUL aura on each tank unit"] .. "\n" ..
+        "|cffffff00/tankwatch|r — " .. L["long alias for /tankw"]
     )
 
     local hint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -2446,6 +2476,33 @@ local function build()
         end
     end
 
+    -- Wrap tabs onto multiple rows when the panel is too narrow.
+    -- Bottom rows get a higher FrameLevel so their top edges don't get
+    -- clipped under the row above (PanelTabButtonTemplate's top edge sits
+    -- a few pixels above its anchor y, which would render under the next
+    -- row otherwise — looks ugly).
+    local function layoutTabs()
+        local available = panel:GetWidth() - 24
+        local x, y = 12, 2
+        local rowH = 24
+        local row = 0
+        local baseLevel = panel:GetFrameLevel()
+        for _, tab in ipairs(tabBtns) do
+            local w = tab:GetWidth()
+            if x > 12 and (x + w) > available + 12 then
+                x = 12
+                y = y - rowH
+                row = row + 1
+            end
+            tab:ClearAllPoints()
+            tab:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", x, y)
+            tab:SetFrameLevel(baseLevel + 2 + row * 2)
+            x = x + w + 2
+        end
+    end
+    layoutTabs()
+    panel:HookScript("OnSizeChanged", layoutTabs)
+
     -- ========================================================
     -- Resize grip (bottom-right). Saves the chosen size in
     -- TankWatchDB.panelSize, restored next time the panel is opened.
@@ -2598,14 +2655,21 @@ local function build()
           tooltip = L["Open BossWatch options"] or "Open BossWatch options",
           loadedCheck = function()
               local BW = _G.BossWatch
-              return C_AddOns and C_AddOns.IsAddOnLoaded
-                     and C_AddOns.IsAddOnLoaded("BossWatch")
+              return TW.IsAddOnLoaded and TW.IsAddOnLoaded("BossWatch")
                      and BW and BW.ToggleOptions
           end,
           onClick = function()
-              if panel and panel:IsShown() then panel:Hide() end
+              local point, _, relPoint, x, y
+              if panel and panel:IsShown() then
+                  point, _, relPoint, x, y = panel:GetPoint(1)
+                  panel:Hide()
+              end
               local BW = _G.BossWatch
-              if BW and BW.ToggleOptions then BW:ToggleOptions() end
+              if BW and BW.ShowOptionsAt and point then
+                  BW:ShowOptionsAt(point, relPoint, x, y)
+              elseif BW and BW.ToggleOptions then
+                  BW:ToggleOptions()
+              end
           end },
     }
 
@@ -2716,6 +2780,25 @@ function TW:ToggleOptions()
     else panel.refreshAll(); panel:Show() end
 end
 
+-- Cross-addon handoff: open the panel at a specific position, used by sister
+-- addons (BossWatch) when switching via side tabs so the window doesn't jump
+-- to its previously-saved spot. Coordinates are persisted, so reopening later
+-- from the minimap / slash command will land in the same place.
+function TW:ShowOptionsAt(point, relPoint, x, y)
+    if not panel then build() end
+    if point then
+        panel:ClearAllPoints()
+        panel:SetPoint(point, UIParent, relPoint or point, x or 0, y or 0)
+        TankWatchDB.panelPoint = {
+            point = point, relPoint = relPoint or point,
+            x = math.floor((x or 0) + 0.5),
+            y = math.floor((y or 0) + 0.5),
+        }
+    end
+    panel.refreshAll()
+    panel:Show()
+end
+
 function TW:RegisterBlizzardSettings()
     if TW._settingsCategoryID or not Settings or not Settings.RegisterCanvasLayoutCategory then
         return
@@ -2727,7 +2810,7 @@ function TW:RegisterBlizzardSettings()
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("TankWatch")
 
-    local version = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
+    local version = (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Version")) or "?"
     local sub = host:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     sub:SetWidth(540); sub:SetJustifyH("LEFT")
@@ -2744,7 +2827,7 @@ function TW:RegisterBlizzardSettings()
 
     local hint = host:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     hint:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -10)
-    hint:SetText(L["You can also use the slash command: /tw"])
+    hint:SetText(L["You can also use the slash command: /tankw"])
 
     local category = Settings.RegisterCanvasLayoutCategory(host, "TankWatch")
     category.ID = "TankWatch"
