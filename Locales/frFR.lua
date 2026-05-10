@@ -426,4 +426,8 @@ L["Click to choose a color"] = "Cliquer pour choisir une couleur"
 -- About
 L["Click a URL to select it, then Ctrl+C to copy."] =
     "Clique une URL pour la sélectionner, puis Ctrl+C pour copier."
+L["Drag to resize"] = "Glisser pour redimensionner"
+L["Right-click to reset size"] = "Clic droit : réinitialiser la taille"
+L["Profile"] = "Profil"
+L["tanks"]   = "tanks"
 L["Font (applies to all text)"] = "Police (s'applique à tous les textes)"

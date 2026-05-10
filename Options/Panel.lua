@@ -73,6 +73,7 @@ local function makeSlider(parent, label, key, minV, maxV, step, x, y, width)
     sl:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     sl:SetWidth(width or 200)
     sl.dbKey = key
+    sl._label = label
 
     local function fmt(v)
         if step < 1 then return string.format("%.2f", v) end
@@ -115,6 +116,7 @@ local function makeCheck(parent, label, key, x, y)
     cb.Text:SetFontObject("GameFontHighlight")
     cb.Text:SetText(label)
     cb.dbKey = key
+    cb._label = label
     cb:SetScript("OnClick", function(self)
         TW:GetDB()[key] = self:GetChecked() and true or false
         refresh()
@@ -132,6 +134,7 @@ local function makeDropdown(parent, label, key, options, x, y, width)
     dd:SetWidth(width or 160)
     dd.dbKey = key
     dd._options = options
+    dd._label = label
 
     dd:SetupMenu(function(_, rootDescription)
         for _, opt in ipairs(options) do
@@ -1547,12 +1550,25 @@ local function build()
     panel:SetSize(720, 620)
     panel:SetPoint("CENTER")
     panel:SetMovable(true); panel:EnableMouse(true)
+    panel:SetResizable(true)
+    if panel.SetResizeBounds then
+        panel:SetResizeBounds(620, 480, 1200, 900)
+    elseif panel.SetMinResize then
+        panel:SetMinResize(620, 480)
+        panel:SetMaxResize(1200, 900)
+    end
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
     panel:SetFrameStrata("HIGH")
     panel:Hide()
     panel:SetClampedToScreen(true)
+
+    -- Restore saved size (account-wide)
+    TankWatchDB = TankWatchDB or {}
+    if TankWatchDB.panelSize and TankWatchDB.panelSize.w and TankWatchDB.panelSize.h then
+        panel:SetSize(TankWatchDB.panelSize.w, TankWatchDB.panelSize.h)
+    end
 
     -- Close on ESC
     tinsert(UISpecialFrames, "TankWatchOptions")
@@ -1633,7 +1649,21 @@ local function build()
     local tabBtns = {}
     local function selectTab(id)
         for _, p in pairs(pages) do p:Hide() end
-        if pages[id] then pages[id]:Show() end
+        if pages[id] then
+            local target = pages[id]
+            target:Show()
+            -- Fade-in animation (quick, subtle)
+            target:SetAlpha(0)
+            local ag = target.fadeIn
+            if not ag then
+                ag = target:CreateAnimationGroup()
+                local a = ag:CreateAnimation("Alpha")
+                a:SetFromAlpha(0); a:SetToAlpha(1); a:SetDuration(0.18); a:SetSmoothing("OUT")
+                target.fadeIn = ag
+                ag:SetScript("OnFinished", function() target:SetAlpha(1) end)
+            end
+            ag:Stop(); ag:Play()
+        end
         for _, t in ipairs(tabBtns) do
             styleTabSelected(t, t.id == id)
         end
@@ -1644,6 +1674,156 @@ local function build()
         b:SetScript("OnClick", function() selectTab(t.id) end)
         tabBtns[#tabBtns + 1] = b
     end
+
+    -- ========================================================
+    -- Resize grip (bottom-right). Saves the chosen size in
+    -- TankWatchDB.panelSize, restored next time the panel is opened.
+    -- pageHolder + ScrollFrames are anchored to TOPLEFT/BOTTOMRIGHT so
+    -- they follow the resize automatically. autoFitPage is re-run on
+    -- stop so the scrollbars hide/show appropriately at the new height.
+    -- ========================================================
+    local resizeGrip = CreateFrame("Button", nil, panel)
+    resizeGrip:SetSize(16, 16)
+    resizeGrip:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -2, 2)
+    resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeGrip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeGrip:SetFrameLevel(panel:GetFrameLevel() + 10)
+    resizeGrip:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine(L["Drag to resize"], 1, 1, 1)
+        GameTooltip:AddLine(L["Right-click to reset size"], 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    resizeGrip:SetScript("OnLeave", GameTooltip_Hide)
+    resizeGrip:RegisterForClicks("LeftButtonDown", "RightButtonUp")
+    resizeGrip:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then panel:StartSizing("BOTTOMRIGHT") end
+    end)
+    resizeGrip:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" then
+            panel:StopMovingOrSizing()
+            TankWatchDB = TankWatchDB or {}
+            TankWatchDB.panelSize = { w = panel:GetWidth(), h = panel:GetHeight() }
+            for _, sf in pairs(pages) do autoFitPage(sf) end
+        elseif button == "RightButton" then
+            -- Reset to default size
+            panel:SetSize(720, 620)
+            TankWatchDB = TankWatchDB or {}
+            TankWatchDB.panelSize = nil
+            for _, sf in pairs(pages) do autoFitPage(sf) end
+            GameTooltip:Hide()
+        end
+    end)
+
+    -- ========================================================
+    -- Search bar (top-right of the panel) — filters widgets across
+    -- all tabs. Matches the L[label] of each tracked widget. On match,
+    -- highlights with a yellow glow border and switches to the first
+    -- match's tab.
+    -- ========================================================
+    local searchBox = CreateFrame("EditBox", nil, panel, "SearchBoxTemplate")
+    searchBox:SetSize(180, 22)
+    searchBox:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -32, -32)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetMaxLetters(32)
+    searchBox:SetFontObject("GameFontHighlightSmall")
+    searchBox:SetFrameLevel(panel:GetFrameLevel() + 5)
+
+    local function collectAllWidgets()
+        local list = {}
+        local function walk(f)
+            for _, child in ipairs({f:GetChildren()}) do
+                if child._label and child.dbKey then list[#list + 1] = child end
+                walk(child)
+            end
+        end
+        for _, sf in pairs(pages) do walk(sf.content or sf) end
+        return list
+    end
+
+    local _glowPool = {}
+    local function clearGlows()
+        for _, g in ipairs(_glowPool) do g:Hide() end
+    end
+    local function glow(widget)
+        local g
+        for _, x in ipairs(_glowPool) do
+            if not x:IsShown() then g = x; break end
+        end
+        if not g then
+            g = CreateFrame("Frame", nil, widget, "BackdropTemplate")
+            g:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
+            g:SetBackdropBorderColor(1, 0.85, 0, 1)
+            _glowPool[#_glowPool + 1] = g
+        end
+        g:SetParent(widget)
+        g:ClearAllPoints()
+        g:SetPoint("TOPLEFT", widget, "TOPLEFT", -3, 3)
+        g:SetPoint("BOTTOMRIGHT", widget, "BOTTOMRIGHT", 3, -3)
+        g:SetFrameLevel(widget:GetFrameLevel() + 1)
+        g:Show()
+    end
+
+    local function findTabFor(widget)
+        for tabId, sf in pairs(pages) do
+            local f = widget
+            while f and f ~= sf and f ~= sf.content do f = f:GetParent() end
+            if f == sf or f == sf.content then return tabId end
+        end
+    end
+
+    local function performSearch(text)
+        clearGlows()
+        text = text and text:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
+        if text == "" then return end
+        local widgets = collectAllWidgets()
+        local first
+        for _, w in ipairs(widgets) do
+            local lab = w._label and w._label:lower() or ""
+            if lab:find(text, 1, true) then
+                glow(w)
+                if not first then first = w end
+            end
+        end
+        if first then
+            local tabId = findTabFor(first)
+            if tabId then selectTab(tabId) end
+        end
+    end
+
+    searchBox:HookScript("OnTextChanged", function(self) performSearch(self:GetText()) end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); clearGlows() end)
+
+    -- ========================================================
+    -- Footer status bar — shows active profile, visible tank count
+    -- ========================================================
+    local footer = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 12, 4)
+    footer:SetJustifyH("LEFT")
+
+    local function refreshFooter()
+        local profile = TW.GetActiveProfileName and TW:GetActiveProfileName() or "?"
+        local nTanks = 0
+        if TW.TankFrames then
+            for i = 1, (TW.MAX_TANKS or 8) do
+                local f = TW.TankFrames[i]
+                if f and (f._unit or f._testMode) then nTanks = nTanks + 1 end
+            end
+        end
+        local lock = InCombatLockdown() and "  |cffff5555[combat]|r" or ""
+        footer:SetFormattedText("|cffaaaaaa%s:|r |cffffffff%s|r   |cffaaaaaa•|r   %d %s%s",
+            L["Profile"] or "Profile", profile, nTanks, L["tanks"] or "tanks", lock)
+    end
+    refreshFooter()
+
+    -- Refresh footer periodically (every 1s) so combat / tank count stay live
+    local footerTicker = C_Timer and C_Timer.NewTicker and C_Timer.NewTicker(1, refreshFooter)
+    panel:HookScript("OnHide", function() if footerTicker then footerTicker:Cancel(); footerTicker = nil end end)
+    panel:HookScript("OnShow", function()
+        if not footerTicker then footerTicker = C_Timer.NewTicker(1, refreshFooter) end
+        refreshFooter()
+    end)
 
     panel.refreshAll = function()
         local db = TW:GetDB()
