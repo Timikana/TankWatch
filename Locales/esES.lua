@@ -13,6 +13,9 @@ L["Auras"]    = "Auras"
 L["Filters"]  = "Filtros"
 L["Profiles"] = "Perfiles"
 L["About"]    = "Acerca de"
+L["Changelog"] = "Novedades"
+L["Click to collapse/expand this section."] = "Haz clic para plegar/desplegar esta sección."
+L["Reset this section to default values."]  = "Restablecer los valores predeterminados de esta sección."
 
 L["Profile '%s' already exists. Overwrite?"] = "El perfil '%s' ya existe. ¿Sobrescribir?"
 

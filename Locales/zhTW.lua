@@ -11,6 +11,9 @@ L["Auras"]    = "光環"
 L["Filters"]  = "過濾"
 L["Profiles"] = "設定檔"
 L["About"]    = "關於"
+L["Changelog"] = "更新日誌"
+L["Click to collapse/expand this section."] = "點擊以摺疊/展開此區段。"
+L["Reset this section to default values."]  = "將此區段重設為預設值。"
 
 L["Profile '%s' already exists. Overwrite?"] = "設定檔 '%s' 已存在，是否覆蓋？"
 
