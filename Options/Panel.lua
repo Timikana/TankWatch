@@ -1784,6 +1784,19 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.4
+
+|cffffd700New|r — Tooltips on debuff icons
+- Hover over any debuff to see the standard Blizzard tooltip with the
+  full description (secret-safe via SetUnitDebuff).
+- Test-mode icons show a stub tooltip so you can preview placement.
+
+|cffffd700Improved|r — Boss debuff coverage
+- The "Boss-cast only" filter now tries every Blizzard HARMFUL filter
+  (RAID, RAID_IN_COMBAT, IMPORTANT, DISPELLABLE, RAID_PLAYER_DISPELLABLE)
+  before falling back. M+/dungeon debuffs that were tagged IMPORTANT
+  but not RAID now show up.
+
 ## v1.4.3
 
 |cffffd700Fixed|r — Boss debuffs no longer missing on retail
