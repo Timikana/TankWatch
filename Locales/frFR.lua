@@ -444,6 +444,15 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.1
+
+|cffffd700Nouveau|r — Onglets latéraux d'addon
+- Onglets discrets sur le bord gauche du panneau pour basculer entre
+  TankWatch et BossWatch en un clic.
+- Le second onglet n'apparaît que si l'addon frère est installé aussi.
+- Style moderne : fond verre sombre, liseré doré sur l'addon actif,
+  halo au survol.
+
 ## v1.4.0
 
 |cffffd700Nouveau|r — Panneau d'options moderne et responsive

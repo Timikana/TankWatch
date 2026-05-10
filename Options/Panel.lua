@@ -1786,6 +1786,15 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.1
+
+|cffffd700New|r — Sister-addon side tabs
+- Discreet tabs on the left edge of the options panel let you switch
+  between TankWatch and BossWatch with one click.
+- The second tab only appears when the sister addon is also installed.
+- Modern style: dark glass backdrop, gold accent stripe on the active
+  addon, glow on hover.
+
 ## v1.4.0
 
 |cffffd700New|r — Modern responsive options panel
