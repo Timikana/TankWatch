@@ -215,7 +215,25 @@ local function getSpellID(aura)
     return sid
 end
 
-local function passesFilter(aura, db)
+-- DandersFrames-style boss debuff detection. C_UnitAuras.IsAuraFilteredOut-
+-- ByInstanceID(unit, instId, "HARMFUL|RAID") is the secret-safe way to ask
+-- Blizzard "is this aura something a raid frame would highlight?" — which
+-- is what we mean by a boss debuff. Avoids reading the secret-tagged
+-- `aura.isBossAura` field entirely. Returns true/false on success, nil
+-- when the API isn't available (Classic / older retail).
+local _IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+local function passesRaidFilter(unit, aura)
+    if not _IsAuraFilteredOut or not aura then return nil end
+    local instId
+    pcall(function() instId = aura.auraInstanceID end)
+    if isSecret(instId) or type(instId) ~= "number" then return nil end
+    local notFiltered
+    pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, "HARMFUL|RAID") end)
+    if notFiltered == nil then return nil end
+    return notFiltered == true
+end
+
+local function passesFilter(unit, aura, db)
     if not aura then return false end
     local sid = getSpellID(aura)
 
@@ -228,19 +246,38 @@ local function passesFilter(aura, db)
     local mode = db.auraFilterMode or "ALL"
     if mode == "ALL"       then return true  end
     if mode == "WHITELIST" then return false end
-    -- BOSS mode: in 12.0 `isBossAura` is secret-tagged. We use
-    -- `isFromPlayerOrPlayerPet` (regular value, non-secret) as a proxy:
-    -- HARMFUL auras NOT applied by the player/pet are almost certainly
-    -- from a hostile NPC (boss, mob, environment).
+
+    -- BOSS mode: prefer Blizzard's own RAID filter (secret-safe).
+    local raidPass = passesRaidFilter(unit, aura)
+    if raidPass ~= nil then return raidPass end
+    -- BOSS mode: in 12.0 `isBossAura` is secret-tagged on auras whose
+    -- source is a hostile unit (the field gets sealed along with the
+    -- caster record). `isFromPlayerOrPlayerPet` is usually a regular
+    -- value but can also come back nil for some auras with no clear
+    -- attribution. Cascade through three checks, defaulting to "show"
+    -- when nothing tells us it came from us — better than missing real
+    -- boss debuffs.
     local fromMe
     pcall(function() fromMe = aura.isFromPlayerOrPlayerPet end)
-    if isSecret(fromMe) or fromMe == nil then
-        local isBoss
-        pcall(function() isBoss = aura.isBossAura end)
-        if isSecret(isBoss) or isBoss == nil then return false end
+    if not isSecret(fromMe) and fromMe ~= nil then
+        return fromMe == false
+    end
+    -- isFromPlayerOrPlayerPet not available — try isBossAura
+    local isBoss
+    pcall(function() isBoss = aura.isBossAura end)
+    if not isSecret(isBoss) and isBoss ~= nil then
         return isBoss == true
     end
-    return fromMe == false
+    -- Both unavailable — fall back to sourceUnit. If we have one and it
+    -- isn't the player or pet, treat as hostile-cast (= keep the aura).
+    -- Permissive: when sourceUnit is also unknown/secret, let the aura
+    -- through rather than hide it.
+    local src
+    pcall(function() src = aura.sourceUnit end)
+    if not isSecret(src) and type(src) == "string" then
+        return src ~= "player" and src ~= "pet"
+    end
+    return true
 end
 
 local function getStacks(aura)
@@ -266,7 +303,7 @@ function TW.UpdateAuras(frame)
 
     local found = {}
     iterHarmful(frame._unit, maxCount * 4, function(aura)
-        if passesFilter(aura, db) then
+        if passesFilter(frame._unit, aura, db) then
             -- "Only stacks > 1" filter: only applied when stacks is a
             -- non-secret regular number; otherwise we can't compare and
             -- we let the aura through.

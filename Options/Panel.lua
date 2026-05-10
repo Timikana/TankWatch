@@ -1784,6 +1784,18 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.3
+
+|cffffd700Fixed|r — Boss debuffs no longer missing on retail
+- The "Boss-cast only" filter now uses Blizzard's secret-safe RAID
+  filter (same approach as DandersFrames) — picks up encounter
+  debuffs that were filtered out before because their `isBossAura`
+  field was secret-tagged.
+- Class icon in compact mode now reads the English class token from
+  UnitClass (was reading the localized name → CLASS_ICON_COORDS lookup
+  failed → whole texture sheet was visible).
+- Changing visibility mode hides/shows frames immediately (no /reload).
+
 ## v1.4.2
 
 |cffffd700New|r — Slash command renamed: /tankw (with /tankwatch alias)

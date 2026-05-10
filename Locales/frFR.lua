@@ -446,6 +446,19 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.3
+
+|cffffd700Corrigé|r — Les debuffs de boss ne manquent plus sur retail
+- Le filtre "Lancés par un boss uniquement" utilise maintenant le filtre
+  RAID natif de Blizzard (la même approche que DandersFrames) — récupère
+  les debuffs d'encounter qui étaient masqués avant parce que leur champ
+  `isBossAura` revenait en secret-value.
+- L'icône de classe en mode compact lit désormais le token anglais
+  de UnitClass (avant : nom localisé → lookup CLASS_ICON_COORDS échouait
+  → toute la planche de classes s'affichait).
+- Changer le mode de visibilité masque/affiche le frame immédiatement
+  (plus besoin de /reload).
+
 ## v1.4.2
 
 |cffffd700Nouveau|r — Commande slash renommée : /tankw (alias /tankwatch)
