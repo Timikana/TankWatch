@@ -12,6 +12,8 @@ L["Filters"]  = "필터"
 L["Profiles"] = "프로필"
 L["About"]    = "정보"
 L["Changelog"] = "변경 사항"
+L["Click to collapse/expand this section."] = "이 섹션을 접거나 펼치려면 클릭하세요."
+L["Reset this section to default values."]  = "이 섹션을 기본값으로 초기화합니다."
 
 L["Profile '%s' already exists. Overwrite?"] = "프로필 '%s'이(가) 이미 존재합니다. 덮어쓰시겠습니까?"
 

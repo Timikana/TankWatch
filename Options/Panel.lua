@@ -29,7 +29,7 @@ local _searchTabRefs = {}
 local _searchImpl = function() end
 local function _applySearch(q) return _searchImpl(q) end
 
-local SECTION_GAP      = 8
+local SECTION_GAP      = 28
 local COLLAPSED_HEIGHT = 22
 
 local function _cloneDefault(v)
@@ -621,11 +621,12 @@ local function makeSection(parent, title, x, y)
     parent._sectionHeaders = parent._sectionHeaders or {}
     parent._sectionHeaders[#parent._sectionHeaders + 1] = { title = title, region = header }
 
-    -- Plus/Minus chevron next to header
-    local fold = CreateFrame("Button", nil, container)
-    fold:SetSize(14, 14)
-    fold:SetPoint("LEFT", header, "RIGHT", 4, -1)
-    section.fold = fold
+    -- Plus/Minus chevron next to header. Texture (not Button) so clicks
+    -- pass through to the clickArea covering the whole bar.
+    local chevron = container:CreateTexture(nil, "OVERLAY")
+    chevron:SetSize(14, 14)
+    chevron:SetPoint("LEFT", header, "RIGHT", 4, -1)
+    section.chevron = chevron
 
     -- Invisible click strip covering the entire header row (title + separator
     -- line) so clicking anywhere on the bar toggles the section. Excludes
@@ -644,9 +645,7 @@ local function makeSection(parent, title, x, y)
 
     local TEX_EXPANDED  = "Interface\\Buttons\\UI-MinusButton-Up"
     local TEX_COLLAPSED = "Interface\\Buttons\\UI-PlusButton-Up"
-    fold:SetNormalTexture(TEX_EXPANDED)
-    fold:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-    fold:SetFrameLevel((container:GetFrameLevel() or 0) + 5)
+    chevron:SetTexture(TEX_EXPANDED)
 
     -- Reset button (refresh icon at the far right of the section row)
     local btnReset = CreateFrame("Button", nil, container)
@@ -658,9 +657,8 @@ local function makeSection(parent, title, x, y)
     btnReset:SetFrameLevel((container:GetFrameLevel() or 0) + 5)
     btnReset:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine((L["Reset section"] or "Reset section") .. " — " .. title, 1, 1, 1)
-        GameTooltip:AddLine(L["Click to restore default values for this section"] or
-            "Click to restore default values for this section", 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["Reset this section to default values."] or
+            "Reset this section to default values.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     btnReset:SetScript("OnLeave", GameTooltip_Hide)
@@ -690,12 +688,22 @@ local function makeSection(parent, title, x, y)
             C_Timer.After(0, function() self:UpdateNaturalHeight() end)
             return
         end
-        local lowest = cTop
+        local lowest, gotAnyChildPos = cTop, false
         for _, w in ipairs(self.children) do
             if w.IsShown and w:IsShown() and w.GetBottom then
                 local b = w:GetBottom()
-                if b and b < lowest then lowest = b end
+                if b then
+                    gotAnyChildPos = true
+                    if b < lowest then lowest = b end
+                end
             end
+        end
+        -- If we have children but none have a resolved bottom yet, defer.
+        -- Otherwise the container shrinks to COLLAPSED_HEIGHT, the next section
+        -- anchors right under it and you get a stack of overlapping rows.
+        if not gotAnyChildPos and #self.children > 0 then
+            C_Timer.After(0, function() self:UpdateNaturalHeight() end)
+            return
         end
         local span = math.max(COLLAPSED_HEIGHT, cTop - lowest + 8)
         self.container:SetHeight(span)
@@ -708,7 +716,7 @@ local function makeSection(parent, title, x, y)
             else            if w.Show then w:Show() end end
         end
         line:SetShown(not state)
-        fold:SetNormalTexture(state and TEX_COLLAPSED or TEX_EXPANDED)
+        chevron:SetTexture(state and TEX_COLLAPSED or TEX_EXPANDED)
         header:SetTextColor(state and 0.7 or 1, state and 0.6 or 0.82, state and 0.2 or 0)
         self._collapsed = state
         if state then
@@ -737,19 +745,11 @@ local function makeSection(parent, title, x, y)
         if panel and panel.refreshAll then panel.refreshAll() end
     end
 
-    fold:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine((section._collapsed and (L["Expand section"] or "Expand section"))
-            or (L["Collapse section"] or "Collapse section"), 1, 1, 1)
-        GameTooltip:Show()
-    end)
-    fold:SetScript("OnLeave", GameTooltip_Hide)
-    fold:SetScript("OnClick", function() section:Toggle() end)
     clickArea:SetScript("OnClick", function() section:Toggle() end)
     clickArea:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine((section._collapsed and (L["Expand section"] or "Expand section"))
-            or (L["Collapse section"] or "Collapse section"), 1, 1, 1)
+        GameTooltip:AddLine(L["Click to collapse/expand this section."] or
+            "Click to collapse/expand this section.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     clickArea:SetScript("OnLeave", GameTooltip_Hide)
@@ -1786,6 +1786,42 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.0
+
+|cffffd700New|r — Modern responsive options panel
+- Resize grip in the bottom-right; size and position saved account-wide.
+- Right-click the grip to reset the panel to its default 720×620 size.
+- Per-tab scroll memory: each tab remembers its scroll offset.
+- Subtle fade-in when switching tabs; footer shows active profile + tank count.
+
+|cffffd700New|r — Collapsible sections
+- Every section now has a collapse/expand chevron AND the whole header bar
+  (title + gold separator) is clickable to toggle.
+- Per-section reset button (refresh icon, far right) restores defaults
+  for that section's controls only — your other settings stay untouched.
+- Collapsed state is persisted across reloads.
+
+|cffffd700New|r — Search bar (top-right)
+- Type any keyword from a label or tooltip; matching widgets are gathered
+  on a results page with a breadcrumb pointing back to their tab/section.
+- Tab labels show a hit count when a search is active.
+- Clearing the search restores everything to its home tab.
+
+|cffffd700New|r — Auto-flow layout
+- Right-column widgets (dropdowns, sliders) now follow the right edge
+  when you widen the panel, instead of leaving a growing dead band.
+
+|cffffd700New|r — Changelog tab
+- This very tab! Per-version blocks with a localized label
+  (Nouveautés / Neuerungen / Novedades / Novità / Novidades / Что нового /
+  변경 사항 / 更新日志 / 更新日誌).
+
+|cffffd700Improved|r
+- Section + collapse strings translated across 9 languages.
+- Test buttons chained together so they stay grouped at any panel width.
+- Wider "Off" button so its text doesn't bleed into the "1" button.
+- Cleaner section spacing (28px between containers).
+
 ## v1.3.0
 
 |cffffd700New|r — Compact mode (now default for fresh installs)
@@ -2082,7 +2118,7 @@ local function build()
     panel:SetMovable(true); panel:EnableMouse(true)
     panel:SetResizable(true)
     if panel.SetResizeBounds then
-        panel:SetResizeBounds(620, 480, 1200, 900)
+        panel:SetResizeBounds(720, 500, 1400, 1100)
     elseif panel.SetMinResize then
         panel:SetMinResize(620, 480)
         panel:SetMaxResize(1200, 900)
@@ -2142,9 +2178,15 @@ local function build()
         sf:Hide()
 
         local content = CreateFrame("Frame", nil, sf)
-        content:SetSize(680, 900)
+        content:SetSize(sf:GetWidth() > 0 and sf:GetWidth() or 680, 900)
         sf:SetScrollChild(content)
         sf.content = content
+        -- Content width must follow the scroll viewport so section reset
+        -- buttons (anchored to container TOPRIGHT) don't disappear off the
+        -- right edge when the user shrinks the panel.
+        sf:SetScript("OnSizeChanged", function(self, w, _)
+            if w and w > 0 and self.content then self.content:SetWidth(w) end
+        end)
         return sf
     end
 

@@ -432,11 +432,8 @@ L["Profile"] = "Profil"
 L["tanks"]   = "tanks"
 L["Default: "] = "Défaut : "
 L["no match"]  = "aucun résultat"
-L["Reset section"] = "Réinitialiser la section"
-L["Click to restore default values for this section"] =
-    "Cliquer pour restaurer les valeurs par défaut de cette section"
-L["Expand section"]   = "Déplier la section"
-L["Collapse section"] = "Replier la section"
+L["Click to collapse/expand this section."] = "Cliquer pour replier/déplier cette section."
+L["Reset this section to default values."]  = "Réinitialiser cette section aux valeurs par défaut."
 L["Search options…"]  = "Rechercher des options…"
 L["Filter the panel: type any keyword from a label or tooltip. Sections without a match are auto-collapsed."] =
     "Filtre le panneau : tape un mot-clé d'un label ou d'une infobulle. Les sections sans correspondance sont repliées."
@@ -446,6 +443,42 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.0
+
+|cffffd700Nouveau|r — Panneau d'options moderne et responsive
+- Poignée de redimensionnement en bas à droite ; taille et position sauvegardées par compte.
+- Clic droit sur la poignée pour remettre le panneau à sa taille par défaut (720×620).
+- Mémoire de défilement par onglet : chaque onglet retient son offset.
+- Fondu subtil au changement d'onglet ; le pied de page affiche le profil actif + le nombre de tanks.
+
+|cffffd700Nouveau|r — Sections repliables
+- Chaque section a un chevron replier/déplier ET toute la barre d'en-tête
+  (titre + ligne dorée) est cliquable pour basculer.
+- Bouton de réinitialisation par section (icône refresh à droite) qui restaure les défauts
+  de cette section uniquement — tes autres réglages restent intacts.
+- L'état replié est conservé entre les reloads.
+
+|cffffd700Nouveau|r — Barre de recherche (en haut à droite)
+- Tape un mot-clé d'un libellé ou d'une infobulle ; les widgets correspondants
+  sont rassemblés sur une page de résultats avec un fil d'Ariane vers leur onglet/section.
+- Les onglets affichent un compteur de hits pendant une recherche active.
+- Effacer la recherche replace tout dans son onglet d'origine.
+
+|cffffd700Nouveau|r — Disposition auto-flow
+- Les widgets de la colonne droite (menus, sliders) suivent désormais le bord droit
+  quand tu élargis le panneau, au lieu de laisser un trou qui s'agrandit.
+
+|cffffd700Nouveau|r — Onglet Nouveautés
+- Cet onglet ! Blocs par version avec un label localisé
+  (Nouveautés / Neuerungen / Novedades / Novità / Novidades / Что нового /
+  변경 사항 / 更新日志 / 更新日誌).
+
+|cffffd700Amélioré|r
+- Chaînes de sections + collapse traduites dans 9 langues.
+- Boutons de test chaînés entre eux pour rester groupés à toute largeur de panneau.
+- Bouton "Off" élargi pour que son texte ne déborde pas sur le bouton "1".
+- Espacement plus aéré entre les sections (28px).
+
 ## v1.3.0
 
 |cffffd700Nouveau|r — Mode compact (devient le défaut pour les nouvelles installations)

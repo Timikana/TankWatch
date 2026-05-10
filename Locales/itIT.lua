@@ -12,6 +12,8 @@ L["Filters"]  = "Filtri"
 L["Profiles"] = "Profili"
 L["About"]    = "Info"
 L["Changelog"] = "Novità"
+L["Click to collapse/expand this section."] = "Clicca per comprimere/espandere questa sezione."
+L["Reset this section to default values."]  = "Ripristina i valori predefiniti di questa sezione."
 
 L["Profile '%s' already exists. Overwrite?"] = "Il profilo '%s' esiste già. Sovrascrivere?"
 

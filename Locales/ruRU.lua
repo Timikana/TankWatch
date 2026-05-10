@@ -12,6 +12,8 @@ L["Filters"]  = "Фильтры"
 L["Profiles"] = "Профили"
 L["About"]    = "О аддоне"
 L["Changelog"] = "Что нового"
+L["Click to collapse/expand this section."] = "Нажмите, чтобы свернуть/развернуть этот раздел."
+L["Reset this section to default values."]  = "Сбросить этот раздел к значениям по умолчанию."
 
 L["Profile '%s' already exists. Overwrite?"] = "Профиль '%s' уже существует. Перезаписать?"
 
