@@ -2575,6 +2575,130 @@ local function build()
     end
 
     selectTab("layout")
+
+    -- =====================================================================
+    -- Sister-addon side tabs (left edge of the panel, modern style). Self
+    -- (TankWatch) on top, sister (BossWatch) below if its addon is loaded.
+    -- Click → close this panel + open the other addon's options.
+    -- =====================================================================
+    local SIDE_TAB_SIZE = 48
+    local sideTabs = {
+        { id = "TankWatch",  isSelf = true,  icon = "Interface\\AddOns\\TankWatch\\Media\\icon",
+          tooltip = L["TankWatch — Options"], onClick = function() end },
+        { id = "BossWatch",  isSelf = false, icon = "Interface\\AddOns\\BossWatch\\Media\\logo.png",
+          tooltip = L["Open BossWatch options"] or "Open BossWatch options",
+          loadedCheck = function()
+              local BW = _G.BossWatch
+              return C_AddOns and C_AddOns.IsAddOnLoaded
+                     and C_AddOns.IsAddOnLoaded("BossWatch")
+                     and BW and BW.ToggleOptions
+          end,
+          onClick = function()
+              if panel and panel:IsShown() then panel:Hide() end
+              local BW = _G.BossWatch
+              if BW and BW.ToggleOptions then BW:ToggleOptions() end
+          end },
+    }
+
+    local visibleIdx = 0
+    for _, def in ipairs(sideTabs) do
+        if def.isSelf or (def.loadedCheck and def.loadedCheck()) then
+            visibleIdx = visibleIdx + 1
+
+            local tab = CreateFrame("Button", nil, panel, "BackdropTemplate")
+            tab:SetSize(SIDE_TAB_SIZE, SIDE_TAB_SIZE)
+            tab:SetPoint("TOPLEFT", panel, "TOPLEFT", -SIDE_TAB_SIZE + 8,
+                         -68 - (visibleIdx - 1) * (SIDE_TAB_SIZE + 8))
+            tab:SetFrameLevel(panel:GetFrameLevel() + 5)
+
+            tab:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+            tab:SetBackdropColor(0.04, 0.04, 0.07, 0.95)
+
+            local sheen = tab:CreateTexture(nil, "ARTWORK")
+            sheen:SetPoint("TOPLEFT",     tab, "TOPLEFT",      1, -1)
+            sheen:SetPoint("BOTTOMRIGHT", tab, "TOPRIGHT",    -1, -math.floor(SIDE_TAB_SIZE * 0.45))
+            sheen:SetColorTexture(1, 1, 1, 1)
+            if sheen.SetGradient and CreateColor then
+                sheen:SetGradient("VERTICAL",
+                    CreateColor(1, 1, 1, 0.10),
+                    CreateColor(1, 1, 1, 0.00))
+            else
+                sheen:SetVertexColor(1, 1, 1, 0.06)
+            end
+
+            local shade = tab:CreateTexture(nil, "ARTWORK")
+            shade:SetPoint("BOTTOMLEFT",  tab, "BOTTOMLEFT",   1,  1)
+            shade:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", -1,  1)
+            shade:SetHeight(math.floor(SIDE_TAB_SIZE * 0.40))
+            shade:SetColorTexture(0, 0, 0, 1)
+            if shade.SetGradient and CreateColor then
+                shade:SetGradient("VERTICAL",
+                    CreateColor(0, 0, 0, 0.00),
+                    CreateColor(0, 0, 0, 0.45))
+            else
+                shade:SetVertexColor(0, 0, 0, 0.20)
+            end
+
+            local icon = tab:CreateTexture(nil, "ARTWORK", nil, 2)
+            icon:SetPoint("CENTER", tab, "CENTER", 0, 0)
+            icon:SetSize(SIDE_TAB_SIZE - 14, SIDE_TAB_SIZE - 14)
+            icon:SetTexture(def.icon)
+            icon:SetTexCoord(0.06, 0.94, 0.06, 0.94)
+
+            local function makeEdge(point1, point2, w, h)
+                local t = tab:CreateTexture(nil, "BORDER")
+                t:SetPoint(point1, tab, point1, 0, 0)
+                t:SetPoint(point2, tab, point2, 0, 0)
+                if w then t:SetWidth(w) end
+                if h then t:SetHeight(h) end
+                return t
+            end
+            local edges = {
+                makeEdge("TOPLEFT", "TOPRIGHT", nil, 1),
+                makeEdge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 1),
+                makeEdge("TOPLEFT", "BOTTOMLEFT", 1, nil),
+                makeEdge("TOPRIGHT", "BOTTOMRIGHT", 1, nil),
+            }
+            local function setEdgeColor(r, g, b, a)
+                for _, t in ipairs(edges) do t:SetColorTexture(r, g, b, a) end
+            end
+            setEdgeColor(0.20, 0.20, 0.24, 1)
+
+            local glow = tab:CreateTexture(nil, "OVERLAY")
+            glow:SetPoint("TOPLEFT",     tab, "TOPLEFT",     -10,  10)
+            glow:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT",  10, -10)
+            glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+            glow:SetBlendMode("ADD")
+            glow:SetVertexColor(1, 0.82, 0, 0.85)
+            glow:Hide()
+
+            local marker = tab:CreateTexture(nil, "OVERLAY", nil, 1)
+            marker:SetPoint("TOPRIGHT",    tab, "TOPRIGHT",    -0.5, -3)
+            marker:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", -0.5,  3)
+            marker:SetWidth(3)
+            marker:SetColorTexture(1, 0.82, 0, 1)
+            marker:Hide()
+
+            if def.isSelf then
+                setEdgeColor(1, 0.82, 0, 1)
+                glow:Show()
+                marker:Show()
+                tab:EnableMouse(false)
+            else
+                tab:HookScript("OnEnter", function()
+                    setEdgeColor(1, 0.82, 0, 1)
+                    glow:Show()
+                end)
+                tab:HookScript("OnLeave", function()
+                    setEdgeColor(0.20, 0.20, 0.24, 1)
+                    glow:Hide()
+                end)
+                tab:SetScript("OnClick", def.onClick)
+            end
+
+            addTooltip(tab, def.tooltip)
+        end
+    end
 end
 
 function TW:ToggleOptions()

@@ -81,6 +81,7 @@ L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash d
 
 -- Window
 L["TankWatch — Options"] = "TankWatch — Options"
+L["Open BossWatch options"] = "Ouvrir les options BossWatch"
 
 -- Layout
 L["Unlock / Lock Mover"] = "Déverrouiller / Verrouiller"
