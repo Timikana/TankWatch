@@ -142,12 +142,23 @@ function TW.LayoutAuras(frame, db)
     local relPoint = (anchor == "LEFT") and "RIGHT" or
                      (anchor == "RIGHT") and "LEFT" or anchor
 
+    -- Compact mode: glue the first icon to the right of the class icon
+    -- (or to the left of the frame if no icon), forcing growX = RIGHT.
+    local compact = db.compactMode and true or false
+    if compact then growX = "RIGHT" end
+
     for i = 1, maxCount do
         local b = frame._auras[i]
         b:SetSize(size, size)
         b:ClearAllPoints()
         if i == 1 then
-            b:SetPoint(relPoint, frame, anchor, db.aurasX or 0, db.aurasY or 0)
+            if compact and db.showClassIcon and frame.classIcon and frame.classIcon:IsShown() then
+                b:SetPoint("LEFT", frame.classIcon, "RIGHT", 4, 0)
+            elseif compact then
+                b:SetPoint("LEFT", frame, "LEFT", 2, 0)
+            else
+                b:SetPoint(relPoint, frame, anchor, db.aurasX or 0, db.aurasY or 0)
+            end
         else
             local prev = frame._auras[i - 1]
             if growX == "LEFT" then
@@ -215,6 +226,14 @@ function TW.UpdateAuras(frame)
     if not db.showAuras then return end
     local maxCount = db.aurasMaxCount or 5
     ensurePool(frame, maxCount)
+
+    -- Clear any leftover test-loop OnUpdate handlers when switching from
+    -- test mode to a real unit
+    if frame._auras then
+        for _, b in ipairs(frame._auras) do
+            if b._testAcc ~= nil then b:SetScript("OnUpdate", nil); b._testAcc = nil end
+        end
+    end
 
     local found = {}
     iterHarmful(frame._unit, maxCount * 4, function(aura)
@@ -396,15 +415,54 @@ function TW:PrintAuraDebug()
     scan("player", "player (sanity check)")
 end
 
+-- Looping test aura: each button gets its own OnUpdate that ticks the timer,
+-- and on expiry resets duration + picks a new random stack count. Gives the
+-- user a live preview with stacks changing and durations cycling.
+local function startTestLoop(b, data)
+    local maxStacks = data[2]
+    b._testDuration = data[3]
+    b._testStart    = GetTime() - (data[3] * 0.4)
+    b._testStacks   = math.random(1, maxStacks + 2)
+    b.cd:SetCooldown(b._testStart, b._testDuration)
+    b.stacks:SetText(b._testStacks > 1 and tostring(b._testStacks) or "")
+
+    b:SetScript("OnUpdate", function(self, elapsed)
+        self._testAcc = (self._testAcc or 0) + elapsed
+        if self._testAcc < 0.1 then return end  -- update at 10 Hz
+        self._testAcc = 0
+
+        local now = GetTime()
+        local remaining = (self._testStart + self._testDuration) - now
+        if remaining <= 0 then
+            -- Cycle: new duration, fresh start, fresh stacks
+            self._testDuration = math.random(8, 30)
+            self._testStart    = now
+            self._testStacks   = math.random(1, maxStacks + 3)
+            self.cd:SetCooldown(self._testStart, self._testDuration)
+            self.stacks:SetText(self._testStacks > 1 and tostring(self._testStacks) or "")
+            remaining = self._testDuration
+        elseif math.random() < 0.04 then
+            -- Occasional stack change mid-fight (≈4% per tick, ~0.4 chance/s)
+            self._testStacks = math.max(1, math.min(maxStacks + 4, self._testStacks + (math.random(0, 1) == 0 and -1 or 1)))
+            self.stacks:SetText(self._testStacks > 1 and tostring(self._testStacks) or "")
+        end
+        self.timer:SetText(format("%d", math.ceil(remaining)))
+    end)
+end
+
+local function stopTestLoop(b)
+    b:SetScript("OnUpdate", nil)
+    b._testAcc = 0
+end
+
 function TW.SetTestAuras(frame, tankIndex)
     local db = TW:GetDB()
     if not db.showAuras then
         if frame._auras then
-            for _, a in ipairs(frame._auras) do a:Hide() end
+            for _, a in ipairs(frame._auras) do stopTestLoop(a); a:Hide() end
         end
         return
     end
-    -- Apply current text positioning + visibility toggles to existing buttons
     TW.LayoutAuras(frame, db)
     local maxCount = math.min(db.aurasMaxCount or 5, #TEST_AURA_DATA)
     ensurePool(frame, db.aurasMaxCount or 5)
@@ -413,11 +471,10 @@ function TW.SetTestAuras(frame, tankIndex)
         local data = TEST_AURA_DATA[i]
         if data and i <= (1 + (tankIndex % maxCount)) then
             b.icon:SetTexture(data[1])
-            b.stacks:SetText(data[2] > 1 and tostring(data[2]) or "")
-            b.cd:SetCooldown(GetTime() - (data[3] * 0.4), data[3])
-            b.timer:SetText(format("%d", data[3] - data[3] * 0.4))
+            startTestLoop(b, data)
             b:Show()
         else
+            stopTestLoop(b)
             b:Hide()
         end
     end

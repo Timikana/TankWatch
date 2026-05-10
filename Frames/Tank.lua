@@ -5,7 +5,41 @@ local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitName, UnitClass, UnitExists = UnitName, UnitClass, UnitExists
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local UnitPower, UnitPowerMax, UnitPowerType = UnitPower, UnitPowerMax, UnitPowerType
 local IsInRaid, IsInGroup = IsInRaid, IsInGroup
+
+-- Class icon texcoords on the standard 4x4 atlas
+local CLASS_ICON_TEX = "Interface\\TargetingFrame\\UI-Classes-Circles"
+local CLASS_ICON_COORDS = {
+    WARRIOR     = {0.00, 0.25, 0.00, 0.25},
+    MAGE        = {0.25, 0.50, 0.00, 0.25},
+    ROGUE       = {0.50, 0.75, 0.00, 0.25},
+    DRUID       = {0.75, 1.00, 0.00, 0.25},
+    HUNTER      = {0.00, 0.25, 0.25, 0.50},
+    SHAMAN      = {0.25, 0.50, 0.25, 0.50},
+    PRIEST      = {0.50, 0.75, 0.25, 0.50},
+    WARLOCK     = {0.75, 1.00, 0.25, 0.50},
+    PALADIN     = {0.00, 0.25, 0.50, 0.75},
+    DEATHKNIGHT = {0.25, 0.50, 0.50, 0.75},
+    MONK        = {0.50, 0.75, 0.50, 0.75},
+    DEMONHUNTER = {0.75, 1.00, 0.50, 0.75},
+    EVOKER      = {0.00, 0.25, 0.75, 1.00},
+}
+
+-- Power-type RGB lookup (Enum.PowerType in 12.0). Hardcoded because
+-- Blizzard's PowerBarColor table can be secret-tagged.
+local POWER_COLORS = {
+    [0]  = { r = 0,    g = 0,    b = 1    },  -- Mana
+    [1]  = { r = 1,    g = 0,    b = 0    },  -- Rage
+    [2]  = { r = 1,    g = 0.5,  b = 0.25 },  -- Focus
+    [3]  = { r = 1,    g = 1,    b = 0    },  -- Energy
+    [6]  = { r = 0,    g = 0.82, b = 1    },  -- Runic Power
+    [8]  = { r = 0.3,  g = 0.45, b = 0.85 },  -- Lunar Power
+    [11] = { r = 0,    g = 0.5,  b = 1    },  -- Maelstrom
+    [13] = { r = 0.74, g = 0.36, b = 0.98 },  -- Insanity
+    [17] = { r = 0.78, g = 0.26, b = 0.99 },  -- Fury (DH)
+    [18] = { r = 1,    g = 0.61, b = 0    },  -- Pain (DH)
+}
 local GetNumGroupMembers = GetNumGroupMembers
 local format = string.format
 local AbbreviateNumbers = AbbreviateNumbers
@@ -295,14 +329,44 @@ local function CreateTankFrame(index)
     abs:Hide()
     f.absorbBar = abs
 
-    -- Name + HP text
-    local nameText = hp:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    -- Power bar (rage / mana / runic power / etc.) — pinned at the BOTTOM
+    -- of the frame; healthBar's bottom is shifted up to make room when shown.
+    local pp = CreateFrame("StatusBar", nil, f)
+    pp:Hide()
+    f.powerBar = pp
+
+    local ppBg = pp:CreateTexture(nil, "BACKGROUND")
+    ppBg:SetAllPoints(pp)
+    ppBg:SetColorTexture(0.04, 0.04, 0.04, 0.65)
+    pp.bg = ppBg
+
+    -- Text overlay frame: sits ABOVE the absorb bar so name + HP text are
+    -- never hidden by the shield overlay.
+    local textLayer = CreateFrame("Frame", nil, hp)
+    textLayer:SetAllPoints(hp)
+    textLayer:SetFrameLevel(abs:GetFrameLevel() + 1)
+    f.textLayer = textLayer
+
+    -- Name + HP text (parented to textLayer so they render on top of absorb)
+    local nameText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameText:SetTextColor(1, 1, 1)
     f.nameText = nameText
 
-    local hpText = hp:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local hpText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     hpText:SetTextColor(0.95, 0.95, 0.95)
     f.healthText = hpText
+
+    -- Power text (parented to the powerBar's OVERLAY so it draws ON TOP of
+    -- the bar fill, not behind it).
+    local ppText = pp:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    ppText:SetTextColor(0.92, 0.92, 0.92)
+    f.powerText = ppText
+
+    -- Class icon (used in compact mode)
+    local classIcon = f:CreateTexture(nil, "ARTWORK")
+    classIcon:SetTexture(CLASS_ICON_TEX)
+    classIcon:Hide()
+    f.classIcon = classIcon
 
     return f
 end
@@ -380,16 +444,65 @@ local function ApplyLayout()
             end
         end
 
+        -- Compact mode: hide health/power/absorb/text/name and show class icon
+        local compact   = db.compactMode and true or false
+        local hideHP    = compact or (db.showHealthBar == false)
+        local pwH       = (not compact and db.showPowerBar and (db.powerBarHeight or 0)) or 0
+
+        if f.bg then
+            if compact then
+                f.bg:SetColorTexture(0, 0, 0, 0)  -- transparent in compact
+            else
+                f.bg:SetColorTexture(0, 0, 0, 0.6)
+            end
+        end
+
         if f.healthBar then
-            f.healthBar:SetStatusBarTexture(hpTex)
-            -- Background texture: set the texture file once here; the actual
-            -- color/tint is applied per-unit in UpdateFrame / test settings
-            -- so CLASS mode can use the unit's class color.
-            if f.healthBar.bg then
-                local bgTex = db.healthBackgroundTexture
-                if db.useBackgroundTexture and bgTex and bgTex ~= "" then
-                    f.healthBar.bg:SetTexture(TW:ResolveTexture(bgTex))
+            if hideHP then
+                f.healthBar:Hide()
+            else
+                f.healthBar:Show()
+                f.healthBar:ClearAllPoints()
+                f.healthBar:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
+                if pwH > 0 then
+                    f.healthBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1 + pwH + 1)
+                else
+                    f.healthBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
                 end
+                f.healthBar:SetStatusBarTexture(hpTex)
+                if f.healthBar.bg then
+                    local bgTex = db.healthBackgroundTexture
+                    if db.useBackgroundTexture and bgTex and bgTex ~= "" then
+                        f.healthBar.bg:SetTexture(TW:ResolveTexture(bgTex))
+                    end
+                end
+            end
+        end
+
+        -- Class icon: visible if compactMode + showClassIcon
+        if f.classIcon then
+            if compact and db.showClassIcon then
+                local sz = db.classIconSize or 28
+                f.classIcon:ClearAllPoints()
+                f.classIcon:SetPoint("LEFT", f, "LEFT", 2, 0)
+                f.classIcon:SetSize(sz, sz)
+                f.classIcon:Show()
+            else
+                f.classIcon:Hide()
+            end
+        end
+
+        -- Power bar — pinned to BOTTOM of the frame
+        if f.powerBar then
+            if pwH > 0 then
+                f.powerBar:ClearAllPoints()
+                f.powerBar:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  1,  1)
+                f.powerBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+                f.powerBar:SetHeight(pwH)
+                f.powerBar:SetStatusBarTexture(TW:ResolveTexture(db.powerBarTexture or db.healthTexture))
+                f.powerBar:Show()
+            else
+                f.powerBar:Hide()
             end
         end
 
@@ -417,6 +530,14 @@ local function ApplyLayout()
             f.healthText:SetPoint(a, f.healthBar, a, db.healthTextX or 0, db.healthTextY or 0)
             f.healthText:SetJustifyH(justifyOf(a))
         end
+        if f.powerText then
+            f.powerText:ClearAllPoints()
+            local a = db.powerTextAnchor
+            if not VALID_ANCHOR9[a] then a = "RIGHT"; db.powerTextAnchor = a end
+            local refBar = (pwH > 0) and f.powerBar or f.healthBar
+            f.powerText:SetPoint(a, refBar, a, db.powerTextX or 0, db.powerTextY or 0)
+            f.powerText:SetJustifyH(justifyOf(a))
+        end
 
         if TW.LayoutAuras then TW.LayoutAuras(f, db) end
     end
@@ -431,9 +552,23 @@ local function UpdateFrame(f)
     local db = TW:GetDB()
     local unit = f._unit
 
+    -- Compact mode forces name/text/bars hidden regardless of individual toggles
+    local compact = db.compactMode and true or false
+
+    -- Class icon update (compact only)
+    if f.classIcon and compact and db.showClassIcon then
+        local _, cls = pcall(UnitClass, unit)
+        if isSecret(cls) then cls = nil end
+        if type(cls) == "string" and CLASS_ICON_COORDS[cls] then
+            local c = CLASS_ICON_COORDS[cls]
+            f.classIcon:SetTexCoord(c[1], c[2], c[3], c[4])
+        end
+    end
+
     -- Name
     if f.nameText then
-        if db.showName then
+        if compact then f.nameText:Hide()
+        elseif db.showName then
             local ok, name = pcall(UnitName, unit)
             if not ok then name = "?" end
             -- Order matters: isSecret check BEFORE any nil/truthy comparison.
@@ -476,20 +611,11 @@ local function UpdateFrame(f)
         end
     end
 
-    -- HP text. Only absolute formats are supported in 12.0 — UnitHealth is
-    -- secret-tagged and AbbreviateNumbers can return secret strings, which
-    -- prevents reliable concatenation with regular characters.
+    -- HP text — abbreviated current value only.
     if f.healthText then
-        if not db.showHealthText then
+        if compact or not db.showHealthText then
             f.healthText:Hide()
         else
-            local fmt = db.healthTextFormat or "CURRENT"
-            if fmt == "PERCENT" or fmt == "CURRENT_PERCENT" then
-                fmt = "CURRENT"
-                db.healthTextFormat = fmt
-            end
-
-            -- Current
             local curStr
             if isSecret(cur) and AbbreviateNumbers then
                 pcall(function() curStr = AbbreviateNumbers(cur) end)
@@ -499,36 +625,83 @@ local function UpdateFrame(f)
                 curStr = tostring(cur)
             end
 
-            -- Max (only if not secret)
-            local maxStr
-            if not isSecret(max) and max and max > 0 and AbbreviateNumbers then
-                maxStr = AbbreviateNumbers(max)
-            end
-
-            local text
             if isSecret(curStr) then
-                text = curStr
-            elseif fmt == "CURRENT_MAX" and curStr and maxStr then
-                text = curStr .. " / " .. maxStr
-            else
-                text = curStr
-            end
-
-            if isSecret(text) then
-                f.healthText:SetText(text)
-                f.healthText:Show()
-            elseif text == nil or text == "" then
+                f.healthText:SetText(curStr); f.healthText:Show()
+            elseif curStr == nil or curStr == "" then
                 f.healthText:Hide()
             else
-                f.healthText:SetText(text)
-                f.healthText:Show()
+                f.healthText:SetText(curStr); f.healthText:Show()
+            end
+        end
+    end
+
+    -- Power bar (rage / mana / runic / energy / fury / pain — auto by spec)
+    if f.powerBar and not compact and db.showPowerBar and (db.powerBarHeight or 0) > 0 then
+        local pType
+        pcall(function() pType = UnitPowerType(unit) end)
+        if isSecret(pType) then pType = nil end
+
+        local pp, ppMax
+        pcall(function() pp = UnitPower(unit) end)
+        pcall(function() ppMax = UnitPowerMax(unit) end)
+
+        if not isSecret(ppMax) and ppMax and ppMax > 0 then
+            f.powerBar:SetMinMaxValues(0, ppMax)
+            if isSecret(pp) then
+                pcall(f.powerBar.SetValue, f.powerBar, pp)
+            elseif pp ~= nil then
+                f.powerBar:SetValue(pp)
+            else
+                f.powerBar:SetValue(0)
+            end
+
+            local pr, pg, pb
+            if db.powerColorMode == "STATIC" then
+                local c = db.powerStaticColor or { r = 0.4, g = 0.4, b = 1 }
+                pr, pg, pb = c.r, c.g, c.b
+            else
+                local pc = POWER_COLORS[pType or -1] or { r = 0.5, g = 0.5, b = 0.5 }
+                pr, pg, pb = pc.r, pc.g, pc.b
+            end
+            f.powerBar:SetStatusBarColor(pr, pg, pb)
+            f.powerBar:Show()
+        else
+            f.powerBar:Hide()
+        end
+    elseif f.powerBar then
+        f.powerBar:Hide()
+    end
+
+    -- Power text — abbreviated current value only.
+    if f.powerText then
+        if compact or not db.showPowerText then
+            f.powerText:Hide()
+        else
+            local pp
+            pcall(function() pp = UnitPower(unit) end)
+
+            local ppStr
+            if isSecret(pp) and AbbreviateNumbers then
+                pcall(function() ppStr = AbbreviateNumbers(pp) end)
+            elseif pp ~= nil and AbbreviateNumbers then
+                ppStr = AbbreviateNumbers(pp)
+            elseif pp ~= nil then
+                ppStr = tostring(pp)
+            end
+
+            if isSecret(ppStr) then
+                f.powerText:SetText(ppStr); f.powerText:Show()
+            elseif ppStr == nil or ppStr == "" then
+                f.powerText:Hide()
+            else
+                f.powerText:SetText(ppStr); f.powerText:Show()
             end
         end
     end
 
     -- Absorb shield overlay
     if f.absorbBar then
-        if not db.showAbsorbBar then
+        if compact or not db.showAbsorbBar then
             f.absorbBar:Hide()
         elseif isSecret(max) or not max or max <= 0 then
             f.absorbBar:Hide()
@@ -701,6 +874,34 @@ local function pickTestTarget(f)
     f._testHPTarget = t
 end
 
+-- Test absorb: random target between 0 and 50% of max HP
+local function pickTestAbsorbTarget(f)
+    -- 30% chance the absorb drops to 0 (representing it expiring), else 5-50% of HP
+    if math.random() < 0.3 then
+        f._testAbsorbTarget = 0
+    else
+        f._testAbsorbTarget = math.random(50, 500)
+    end
+end
+
+-- Test power: behavior depends on type. Rage spikes up + decays; Mana drifts;
+-- Energy / Fury / Pain regenerate quickly; Runic power slowly. Each pick picks
+-- a new target around realistic values.
+local TEST_POWER_TYPES = { 1, 0, 6, 3, 17, 18, 1, 0 }  -- rage, mana, runic, energy, fury, pain
+local function pickTestPowerTarget(f)
+    local pType = f._testPowerType or 1
+    local maxV  = f._testPowerMax or 100
+    local cur   = f._testPower or (maxV * 0.5)
+    local jitter = (pType == 1 or pType == 17 or pType == 18) and (maxV * 0.5)  -- volatile (rage/fury/pain)
+        or (pType == 3) and (maxV * 0.4)  -- energy fluctuates fast
+        or (pType == 6) and (maxV * 0.25) -- runic builds slowly
+        or (maxV * 0.2)                   -- mana drifts
+    local t = cur + math.random(-jitter, jitter)
+    if t < 0 then t = math.random(0, maxV * 0.2) end
+    if t > maxV then t = maxV - math.random(0, maxV * 0.15) end
+    f._testPowerTarget = t
+end
+
 -- Apply current settings to a single test frame: respects showName,
 -- showHealthText, showAuras, healthColorMode, healthStaticColor.
 local function applyTestFrameSettings(f, idx)
@@ -709,13 +910,23 @@ local function applyTestFrameSettings(f, idx)
     local cls = TEST_CLASSES[idx] or "WARRIOR"
     local c   = CLASS_COLORS[cls] or { r = 0.5, g = 0.5, b = 0.5 }
 
+    local compact = db.compactMode and true or false
+
+    -- Class icon for test mode (uses TEST_CLASSES)
+    if f.classIcon then
+        if compact and db.showClassIcon then
+            local c = CLASS_ICON_COORDS[cls]
+            if c then f.classIcon:SetTexCoord(c[1], c[2], c[3], c[4]) end
+        end
+    end
+
     if f.nameText then
-        if db.showName then
+        if compact or not db.showName then
+            f.nameText:Hide()
+        else
             f.nameText:SetText(TEST_NAMES[idx] or ("Tank" .. idx))
             f.nameText:SetTextColor(1, 1, 1)
             f.nameText:Show()
-        else
-            f.nameText:Hide()
         end
     end
 
@@ -734,19 +945,44 @@ local function applyTestFrameSettings(f, idx)
     applyBackgroundFill(f, db, nil, cls)
 
     if f.healthText then
-        if db.showHealthText then f.healthText:Show() else f.healthText:Hide() end
+        if not compact and db.showHealthText then f.healthText:Show() else f.healthText:Hide() end
     end
 
-    -- Fake absorb bar in test mode: idx 1, 3, 5, 7 get a visible shield (~25% of max)
+    -- Power bar (test): set type-color + range. Live values are animated by the ticker.
+    if f.powerBar and not compact and db.showPowerBar and (db.powerBarHeight or 0) > 0 then
+        local pType = f._testPowerType or TEST_POWER_TYPES[((idx - 1) % #TEST_POWER_TYPES) + 1]
+        f._testPowerType = pType
+        f._testPowerMax  = 100
+        f.powerBar:SetMinMaxValues(0, 100)
+        local pr, pg, pb
+        if db.powerColorMode == "STATIC" then
+            local sc = db.powerStaticColor or { r = 0.4, g = 0.4, b = 1 }
+            pr, pg, pb = sc.r, sc.g, sc.b
+        else
+            local pc = POWER_COLORS[pType] or { r = 0.5, g = 0.5, b = 0.5 }
+            pr, pg, pb = pc.r, pc.g, pc.b
+        end
+        f.powerBar:SetStatusBarColor(pr, pg, pb)
+        f.powerBar:Show()
+    elseif f.powerBar then
+        f.powerBar:Hide()
+    end
+    if f.powerText then
+        if not compact and db.showPowerText then f.powerText:Show() else f.powerText:Hide() end
+    end
+
+    -- Absorb test: set range + color. Live value animated by the ticker below.
     if f.absorbBar then
-        if db.showAbsorbBar and (idx % 2 == 1) then
+        if not compact and db.showAbsorbBar then
             f.absorbBar:SetMinMaxValues(0, 1000)
-            f.absorbBar:SetValue(250)
             local cc = db.absorbBarColor or { r = 1, g = 1, b = 1, a = 0.55 }
             f.absorbBar:SetStatusBarColor(cc.r, cc.g, cc.b, cc.a or 0.55)
-            f.absorbBar:Show()
+            -- Start hidden — ticker will Show() once non-zero
+            f._testAbsorb       = math.random(0, 400)
+            f._testAbsorbTarget = math.random(50, 500)
         else
             f.absorbBar:Hide()
+            f._testAbsorb = nil
         end
     end
 
@@ -779,6 +1015,12 @@ function TW:SetTestMode(count)
                 f._testHP       = initial
                 f._testHPTarget = initial
             end
+            -- Power test: pick a power type per index so the user sees variety
+            local pType = TEST_POWER_TYPES[((i - 1) % #TEST_POWER_TYPES) + 1]
+            f._testPowerType   = pType
+            f._testPowerMax    = 100
+            f._testPower       = math.random(20, 80)
+            f._testPowerTarget = f._testPower
             applyTestFrameSettings(f, i)
         else
             f._testMode = false
@@ -805,22 +1047,52 @@ function TW:SetTestMode(count)
                 local f = TW.TankFrames[i]
                 if f and f._testMode and f.healthBar then
                     anyTest = true
-                    -- Use ONLY regular numbers; never re-read from healthBar:GetValue
+                    -- HP — exponential ease toward target (rate ~6/s)
                     f._testHP       = f._testHP       or 700
                     f._testHPTarget = f._testHPTarget or f._testHP
                     if pickNew then pickTestTarget(f) end
-
-                    -- exponential ease toward target (rate ~6/s)
-                    local rate   = 6 * elapsed
-                    if rate > 1 then rate = 1 end
-                    local cur    = f._testHP
-                    local target = f._testHPTarget
-                    cur = cur + (target - cur) * rate
-                    f._testHP = cur
-
-                    f.healthBar:SetValue(cur)
+                    local rateHP = 6 * elapsed
+                    if rateHP > 1 then rateHP = 1 end
+                    f._testHP = f._testHP + (f._testHPTarget - f._testHP) * rateHP
+                    f.healthBar:SetValue(f._testHP)
                     if f.healthText and db.showHealthText then
-                        f.healthText:SetText(formatHP(cur, 1000, db.healthTextFormat))
+                        f.healthText:SetText(AbbreviateNumbers and AbbreviateNumbers(math.floor(f._testHP + 0.5)) or tostring(math.floor(f._testHP + 0.5)))
+                    end
+
+                    -- Absorb — drift around with occasional drops to 0 (expiry)
+                    if f.absorbBar and db.showAbsorbBar then
+                        f._testAbsorb       = f._testAbsorb       or 0
+                        f._testAbsorbTarget = f._testAbsorbTarget or 0
+                        if pickNew then pickTestAbsorbTarget(f) end
+                        local rateA = 4 * elapsed
+                        if rateA > 1 then rateA = 1 end
+                        f._testAbsorb = f._testAbsorb + (f._testAbsorbTarget - f._testAbsorb) * rateA
+                        if f._testAbsorb < 1 then
+                            f.absorbBar:Hide()
+                        else
+                            f.absorbBar:SetValue(f._testAbsorb)
+                            f.absorbBar:Show()
+                        end
+                    end
+
+                    -- Power — animate toward target, faster for energy/fury (twitchy)
+                    if f.powerBar and db.showPowerBar and (db.powerBarHeight or 0) > 0 then
+                        f._testPower       = f._testPower       or 50
+                        f._testPowerTarget = f._testPowerTarget or f._testPower
+                        if pickNew then pickTestPowerTarget(f) end
+                        local pType = f._testPowerType or 1
+                        -- Energy / Fury / Pain twitch faster; rage moderate; runic slow
+                        local ratePW = elapsed * (
+                            (pType == 3 or pType == 17 or pType == 18) and 8
+                            or (pType == 1) and 5
+                            or (pType == 6) and 2
+                            or 3)
+                        if ratePW > 1 then ratePW = 1 end
+                        f._testPower = f._testPower + (f._testPowerTarget - f._testPower) * ratePW
+                        f.powerBar:SetValue(f._testPower)
+                        if f.powerText and db.showPowerText then
+                            f.powerText:SetText(tostring(math.floor(f._testPower + 0.5)))
+                        end
                     end
                 end
             end
@@ -871,6 +1143,9 @@ ev:RegisterEvent("UNIT_HEALTH")
 ev:RegisterEvent("UNIT_MAXHEALTH")
 ev:RegisterEvent("UNIT_AURA")
 ev:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
+ev:RegisterEvent("UNIT_POWER_FREQUENT")
+ev:RegisterEvent("UNIT_MAXPOWER")
+ev:RegisterEvent("UNIT_DISPLAYPOWER")
 ev:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
@@ -879,10 +1154,18 @@ ev:SetScript("OnEvent", function(self, event, unit)
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         TW:RefreshTanks()
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
-        or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+        or event == "UNIT_ABSORB_AMOUNT_CHANGED"
+        or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
-            if f and f._unit == unit then UpdateFrame(f); break end
+            if f and f._unit then
+                local match = (f._unit == unit)
+                if not match and UnitIsUnit then
+                    local ok, same = pcall(UnitIsUnit, f._unit, unit)
+                    if ok and not isSecret(same) and same == true then match = true end
+                end
+                if match then UpdateFrame(f) end
+            end
         end
     end
 end)

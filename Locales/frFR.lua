@@ -226,6 +226,62 @@ L["Status bar texture used for the absorb shield overlay."] =
 L["Absorb side"] = "Côté du bouclier"
 L["Which side of the bar the shield grows from."] =
     "Côté de la barre où le bouclier se remplit (gauche ou droite)."
+
+-- Power bar (mana / rage / énergie / puissance runique / fureur / souffrance)
+L["Power bar"]               = "Barre de ressource"
+L["Show power bar"]          = "Afficher la barre de ressource"
+L["Power bar height"]        = "Hauteur de la barre"
+L["Power texture"]           = "Texture"
+L["Power color mode"]        = "Mode de couleur"
+L["By power type"]           = "Selon le type de ressource"
+L["Power static color"]      = "Couleur statique"
+L["Display a thin power bar (rage / mana / runic power / etc.) below the health bar."] =
+    "Affiche une barre fine de ressource (mana, rage, énergie, puissance runique, fureur, souffrance...) sous la barre de vie."
+L["Height in pixels of the power bar. 0 hides the bar entirely."] =
+    "Hauteur en pixels de la barre. 0 cache la barre."
+L["Status bar texture used for the power bar."] =
+    "Texture utilisée pour la barre de ressource."
+L["How the power bar is colored: automatic by power type (rage = red, mana = blue, etc.) or a fixed custom color."] =
+    "Coloration de la barre : automatique selon le type (rage = rouge, mana = bleu, énergie = jaune, etc.) ou couleur fixe personnalisée."
+
+-- Power text
+L["Power Text"]              = "Texte de ressource"
+L["Show Power Text"]         = "Afficher le texte de ressource"
+L["Power text position"]     = "Position du texte"
+L["Power text Offset X"]     = "Décalage X du texte"
+L["Power text Offset Y"]     = "Décalage Y du texte"
+L["Power format"]            = "Format de la ressource"
+L["Display the power value (rage / mana / etc.) as text."] =
+    "Affiche la valeur de la ressource (mana, rage, énergie...) en texte."
+L["Anchor point of the power text on its bar."] =
+    "Point d'ancrage du texte de ressource sur sa barre."
+L["Horizontal offset of the power text."] = "Décalage horizontal du texte de ressource."
+L["Vertical offset of the power text."]   = "Décalage vertical du texte de ressource."
+L["Format of the power value: current value, or current / max."] =
+    "Format : valeur actuelle, ou actuelle / max."
+
+-- Compact mode + presets
+L["Compact mode (debuffs only)"]      = "Mode compact (debuffs uniquement)"
+L["Show class icon"]                  = "Afficher l'icône de classe"
+L["Hide health/power/absorb bars and texts. Only the debuff icons remain (with the class icon if enabled below)."] =
+    "Masque les barres de vie/ressource/absorption et les textes. Seules les icônes de debuff restent (avec l'icône de classe si l'option ci-dessous est cochée)."
+L["Show a small class icon glued to the left of the debuff row. Only available in compact mode."] =
+    "Affiche une petite icône de classe collée à gauche de la rangée de debuffs. Disponible uniquement en mode compact."
+
+L["Presets"]                 = "Préréglages"
+L["Apply"]                   = "Appliquer"
+L["Apply preset (creates a new profile, original preserved)"] =
+    "Appliquer un préréglage (crée un nouveau profil, l'original reste intact)"
+L["Full — bars + auras (default)"]            = "Complet — barres + auras (défaut)"
+L["Compact — class icon + auras only"]        = "Compact — icône de classe + auras uniquement"
+L["Minimal — auras only (no class icon)"]     = "Minimal — auras uniquement (pas d'icône)"
+L["Pre-configured display modes. Applying creates a new profile copying your current one with the preset's display settings overlaid — your filters, position, fonts and colors are preserved."] =
+    "Modes d'affichage pré-configurés. Appliquer crée un nouveau profil en copiant l'actuel avec les réglages d'affichage du préréglage par-dessus — tes filtres, position, polices et couleurs sont préservés."
+L["Apply the selected preset by creating a new profile."] =
+    "Applique le préréglage sélectionné en créant un nouveau profil."
+L["New profile name (will copy '%s' and apply the preset):"] =
+    "Nom du nouveau profil (copie '%s' et applique le préréglage) :"
+L["preset applied as new profile '%s'"] = "préréglage appliqué dans le nouveau profil '%s'"
 L["Name"]       = "Nom"
 L["Health Text"] = "Texte de vie"
 L["Display"]    = "Affichage"

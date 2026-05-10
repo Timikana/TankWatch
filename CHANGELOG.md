@@ -1,5 +1,65 @@
 # Changelog
 
+## v1.3.0
+
+### New — Compact mode (now the default for fresh installs)
+- **Compact mode** strips the frame down to just a class icon + the boss-cast
+  debuff row. The HP bar, power bar, absorb shield, name and HP text all
+  hide. Perfect when your raid frames already show health and you only
+  want to track who has which stacks.
+- The class icon sits glued to the left edge, debuffs flow to its right.
+  Toggle this in **Layout → General**, with a sub-option to hide the
+  class icon and show only the debuffs.
+- Existing users keep their current configuration. Only new installs
+  start in compact mode; you can switch back to the full bars view from
+  the same toggle.
+
+### New — Display presets in the Profiles tab
+- A **Presets** dropdown in the Profiles tab lets you apply pre-configured
+  display modes:
+  - **Full** — bars + auras + everything visible
+  - **Compact** — class icon + auras only
+  - **Minimal** — auras only, no class icon
+- Applying a preset is **non-destructive**: it creates a brand-new profile
+  by cloning your current one, then overlays the preset's display
+  settings on top. Your filters, position, fonts and colors are
+  preserved. Your original profile is untouched.
+
+### New — Power bar
+- Optional thin power bar (rage, mana, runic power, energy, fury, pain)
+  below the health bar
+- Auto-colored by power type (rage = red, mana = blue, energy = yellow,
+  etc.) or a fixed custom color
+- LSM texture choice
+- Off by default — turn it on in **Bars → Power bar**
+
+### Improved — Test mode
+- Test mode now animates everything live: HP rises and falls, the
+  absorb shield drifts and occasionally expires (drops to 0), debuff
+  durations cycle and stack counts change mid-fight, power bars tick
+  with a different speed per power type
+- Way better for previewing a configuration without entering a raid
+
+### Improved
+- Tooltips now appear when hovering composite slider sub-controls
+  (steppers and slider thumb)
+- Power text is rendered above the power bar fill (was hidden behind
+  it in some configurations)
+- Absorb side dropdown moved to its own row to avoid overlap with the
+  texture preview
+
+### Fixed
+- Removed the format dropdowns for HP and power text — they only
+  exposed formats that don't work reliably in 12.0. The text now
+  always shows the abbreviated current value (e.g. "250 k").
+- Cleaner layer stacking: HP and name text always render above the
+  absorb shield overlay
+- Mover handle floats above tank frames so it can be dragged even
+  when a real tank is in the slot
+- Compatibility: declared `## Interface: 120007` for the upcoming patch
+
+---
+
 ## v1.2.2
 
 ### New

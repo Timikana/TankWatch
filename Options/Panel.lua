@@ -612,6 +612,33 @@ local function buildLayoutPage(page)
     }, 14, y, 220), "v1.x_visibilityMode"),
         L["When TankWatch frames are visible: only in raid, in any group, or always."])
 
+    -- Compact mode toggle + sub-option (also reachable via Profiles > Presets).
+    -- The class-icon checkbox is auto-enabled/disabled based on compactMode.
+    local cbCompact = makeCheck(page, L["Compact mode (debuffs only)"], "compactMode", 280, y)
+    addTooltip(markAsNew(cbCompact, "v1.3_compactMode"),
+        L["Hide health/power/absorb bars and texts. Only the debuff icons remain (with the class icon if enabled below)."])
+
+    local cbClassIcon = makeCheck(page, L["Show class icon"], "showClassIcon", 300, y - 22)
+    addTooltip(markAsNew(cbClassIcon, "v1.3_showClassIcon"),
+        L["Show a small class icon glued to the left of the debuff row. Only available in compact mode."])
+
+    local function syncClassIconEnable()
+        local on = cbCompact:GetChecked()
+        if on then
+            cbClassIcon:Enable()
+            cbClassIcon.Text:SetTextColor(1, 1, 1)
+        else
+            cbClassIcon:Disable()
+            cbClassIcon.Text:SetTextColor(0.5, 0.5, 0.5)
+        end
+    end
+    cbCompact:HookScript("OnClick", function()
+        syncClassIconEnable()
+        if TW.RefreshAll then TW:RefreshAll() end
+    end)
+    cbCompact:HookScript("OnShow", syncClassIconEnable)
+    syncClassIconEnable()
+
     -- ============ POSITION ============
     y = y - 60
     makeSection(page, L["Position"], 14, y); y = y - 24
@@ -705,17 +732,29 @@ local function buildBarsPage(page)
         { text = L["Left"],  value = "LEFT" },
     }, 14, y, 160), "v1.2_absorbBarSide"),
         L["Which side of the bar the shield grows from."])
+
+    -- ============ POWER BAR ============
+    y = y - 60
+    makeSection(page, L["Power bar"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show power bar"], "showPowerBar", 14, y), "v1.3_powerBar"),
+        L["Display a thin power bar (rage / mana / runic power / etc.) below the health bar."])
+    addTooltip(markAsNew(makeSlider(page, L["Power bar height"], "powerBarHeight", 0, 20, 1, 184, y), "v1.3_powerBarHeight"),
+        L["Height in pixels of the power bar. 0 hides the bar entirely."])
+    y = y - 56
+    addTooltip(markAsNew(makeMediaDropdown(page, L["Power texture"], "powerBarTexture", "statusbar", 14, y, 180), "v1.3_powerBarTexture"),
+        L["Status bar texture used for the power bar."])
+    y = y - 56
+    addTooltip(markAsNew(makeDropdown(page, L["Power color mode"], "powerColorMode", {
+        { text = L["By power type"], value = "TYPE" },
+        { text = L["Custom static"], value = "STATIC" },
+    }, 14, y, 200), "v1.3_powerColorMode"),
+        L["How the power bar is colored: automatic by power type (rage = red, mana = blue, etc.) or a fixed custom color."])
+    addTooltip(markAsNew(makeColorPicker(page, L["Power static color"], "powerStaticColor", 320, y), "v1.3_powerStaticColor"),
+        L["Fixed color used when the mode above is set to 'Custom static'."])
 end
 
 local function buildTextPage(page)
     local y = -8
-
-    -- PERCENT removed: UnitHealthPercent + ScaleTo100 didn't behave reliably
-    -- on group members in 12.0. Only absolute formats remain.
-    local FORMATS = {
-        { text = L["Current (50M)"],   value = "CURRENT" },
-        { text = L["Current / Max"],   value = "CURRENT_MAX" },
-    }
 
     -- ============ NAME ============
     makeSection(page, L["Name"], 14, y); y = y - 24
@@ -745,9 +784,19 @@ local function buildTextPage(page)
         L["Horizontal offset of the HP text."])
     addTooltip(makeSlider(page, L["HP text Offset Y"], "healthTextY", -80, 80, 1, 260, y),
         L["Vertical offset of the HP text."])
+
+    -- ============ POWER TEXT ============
+    y = y - 60
+    makeSection(page, L["Power Text"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show Power Text"], "showPowerText", 14, y), "v1.3_powerText"),
+        L["Display the power value (rage / mana / etc.) as text."])
+    addTooltip(markAsNew(makeDropdown(page, L["Power text position"], "powerTextAnchor", ANCHOR9(), 280, y), "v1.3_powerTextAnchor"),
+        L["Anchor point of the power text on its bar."])
     y = y - 56
-    addTooltip(makeDropdown(page, L["HP format"], "healthTextFormat", FORMATS, 14, y, 200),
-        L["Format of the HP value. Percent is unavailable in 12.0 (secret-tagged HP)."])
+    addTooltip(markAsNew(makeSlider(page, L["Power text Offset X"], "powerTextX", -80, 80, 1, 14, y), "v1.3_powerTextX"),
+        L["Horizontal offset of the power text."])
+    addTooltip(markAsNew(makeSlider(page, L["Power text Offset Y"], "powerTextY", -80, 80, 1, 260, y), "v1.3_powerTextY"),
+        L["Vertical offset of the power text."])
 
     -- ============ FONT ============
     y = y - 60
@@ -1316,6 +1365,67 @@ local function buildProfilesPage(page)
         end)
     end)
     addTooltip(btnImport, L["Decode the export string and create a new profile from it."])
+
+    -- ============ PRESETS ============
+    -- Applying a preset creates a NEW profile (clone of current + preset
+    -- overrides) and switches to it. Original profile is preserved.
+    local presetY = -340
+    local presetHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    presetHeader:SetPoint("TOPLEFT", 14, presetY)
+    presetHeader:SetText(L["Presets"])
+    presetHeader:SetTextColor(1, 0.82, 0)
+
+    local presetLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    presetLabel:SetPoint("TOPLEFT", 14, presetY - 22)
+    presetLabel:SetText(L["Apply preset (creates a new profile, original preserved)"])
+
+    local presetDD = CreateFrame("DropdownButton", "TWOpt_DD_preset", page, "WowStyle1DropdownTemplate")
+    presetDD:SetPoint("TOPLEFT", presetLabel, "BOTTOMLEFT", 0, -4)
+    presetDD:SetWidth(280)
+
+    local presetChoice = "FULL"
+    local PRESET_LIST = {
+        { value = "FULL",          text = L["Full — bars + auras (default)"] },
+        { value = "COMPACT_AURAS", text = L["Compact — class icon + auras only"] },
+        { value = "AURAS_ONLY",    text = L["Minimal — auras only (no class icon)"] },
+    }
+    presetDD:SetupMenu(function(_, root)
+        for _, p in ipairs(PRESET_LIST) do
+            root:CreateRadio(p.text,
+                function() return presetChoice == p.value end,
+                function() presetChoice = p.value end)
+        end
+    end)
+    presetDD:GenerateMenu()
+    addTooltip(markAsNew(presetDD, "v1.3_presets"),
+        L["Pre-configured display modes. Applying creates a new profile copying your current one with the preset's display settings overlaid — your filters, position, fonts and colors are preserved."])
+
+    local btnApplyPreset = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnApplyPreset:SetSize(120, 22)
+    btnApplyPreset:SetPoint("LEFT", presetDD, "RIGHT", 8, 0)
+    btnApplyPreset:SetText(L["Apply"])
+    btnApplyPreset:SetScript("OnClick", function()
+        local presetText = "?"
+        for _, p in ipairs(PRESET_LIST) do
+            if p.value == presetChoice then presetText = p.text break end
+        end
+        local current = TW:GetActiveProfileName()
+        local suggested = current .. " - " .. presetText:match("^([^—]+)") or current
+        suggested = suggested:gsub("%s+$", "")
+        askName(format(L["New profile name (will copy '%s' and apply the preset):"], current), function(name)
+            name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if name == "" then return end
+            local ok, err = TW:ApplyPresetAsNewProfile(presetChoice, name)
+            if ok then
+                profileDropdownRefresh()
+                if panel and panel.refreshAll then panel.refreshAll() end
+                print("|cff00ff96TankWatch:|r " .. format(L["preset applied as new profile '%s'"], name))
+            else
+                print("|cff00ff96TankWatch:|r " .. tostring(err))
+            end
+        end)
+    end)
+    addTooltip(btnApplyPreset, L["Apply the selected preset by creating a new profile."])
 
     page._refreshProfiles = function()
         profileDropdownRefresh()

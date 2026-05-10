@@ -40,6 +40,29 @@ TW.Defaults = {
     absorbBarTexture = "Blizzard Shield",  -- LSM name; falls back to Shield-Fill
     absorbBarSide    = "RIGHT",  -- LEFT | RIGHT (which side the shield grows from)
 
+    -- Power bar (rage / mana / runic power / energy / fury / pain — auto by spec)
+    showPowerBar     = false,
+    powerBarHeight   = 5,
+    powerBarTexture  = "Blizzard Raid Bar",
+    powerColorMode   = "TYPE",  -- "TYPE" (auto by power type) | "STATIC"
+    powerStaticColor = { r = 0.4, g = 0.4, b = 1 },
+
+    -- Power text
+    showPowerText      = false,
+    powerTextAnchor    = "RIGHT",
+    powerTextX         = 0,
+    powerTextY         = 0,
+    powerTextFormat    = "CURRENT",  -- CURRENT | CURRENT_MAX
+
+    -- Display modes (presets-driven)
+    -- Compact mode is the default for new installs: TankWatch's value-add is
+    -- the focused debuff/stack view; HP bars are already shown by raid frames.
+    -- Toggle compactMode off in Layout > General to get the full bars view.
+    showHealthBar = true,
+    compactMode   = true,
+    showClassIcon = true,
+    classIconSize = 28,
+
     -- Name text
     showName = true, nameAnchor = "LEFT", nameX = 4, nameY = 0, nameMaxLength = 14,
     showHealthText = true, healthTextAnchor = "RIGHT", healthTextX = 0, healthTextY = 0,
@@ -346,6 +369,74 @@ end
 -- ============================================================
 -- TEXTURE / FONT RESOLUTION
 -- ============================================================
+-- ============================================================
+-- DISPLAY PRESETS
+--   Each preset only writes the visibility/sizing flags it cares about.
+--   It preserves position, scale, fonts, filters, whitelist/blacklist.
+-- ============================================================
+TW.PRESETS = {
+    FULL = {
+        showHealthBar  = true,
+        showHealthText = true,
+        showName       = true,
+        showPowerBar   = false,
+        showAbsorbBar  = true,
+        showAuras      = true,
+        compactMode    = false,
+        showClassIcon  = false,
+        frameWidth     = 200,
+        frameHeight    = 36,
+    },
+    COMPACT_AURAS = {
+        showHealthBar  = false,
+        showHealthText = false,
+        showName       = false,
+        showPowerBar   = false,
+        showAbsorbBar  = false,
+        showAuras      = true,
+        compactMode    = true,
+        showClassIcon  = true,
+        classIconSize  = 28,
+        frameWidth     = 200,
+        frameHeight    = 32,
+    },
+    AURAS_ONLY = {
+        showHealthBar  = false,
+        showHealthText = false,
+        showName       = false,
+        showPowerBar   = false,
+        showAbsorbBar  = false,
+        showAuras      = true,
+        compactMode    = true,
+        showClassIcon  = false,
+        frameWidth     = 200,
+        frameHeight    = 32,
+    },
+}
+
+-- Non-destructive preset application:
+-- 1. Clone the active profile under a new name (caller chooses)
+-- 2. Apply the preset's overrides to the clone
+-- 3. Switch to the new profile
+-- The original profile stays untouched.
+function TW:ApplyPresetAsNewProfile(presetName, newProfileName)
+    local preset = TW.PRESETS[presetName]
+    if not preset then return false, "unknown preset" end
+    newProfileName = newProfileName and newProfileName:gsub("^%s+", ""):gsub("%s+$", "")
+    if not newProfileName or newProfileName == "" then return false, "empty name" end
+    local current = TW:GetActiveProfileName()
+    local ok, err = TW:CreateProfile(newProfileName, current)
+    if not ok then return false, err end
+    -- Now write preset overrides into the new profile
+    local root = ensureRoot()
+    local p = root.profiles[newProfileName]
+    for k, v in pairs(preset) do p[k] = v end
+    TW:SetActiveProfile(newProfileName)
+    if TW.RefreshAll then TW:RefreshAll() end
+    if TW.ApplyFonts then TW:ApplyFonts() end
+    return true
+end
+
 function TW:ResolveTexture(name)
     if not name or name == "" then return "Interface\\TargetingFrame\\UI-StatusBar" end
     if name:find("\\") or name:find("/") then return name end
