@@ -11,6 +11,7 @@ L["Auras"]    = "Ауры"
 L["Filters"]  = "Фильтры"
 L["Profiles"] = "Профили"
 L["About"]    = "О аддоне"
+L["Changelog"] = "Что нового"
 
 L["Profile '%s' already exists. Overwrite?"] = "Профиль '%s' уже существует. Перезаписать?"
 

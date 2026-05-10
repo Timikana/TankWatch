@@ -11,6 +11,7 @@ L["Auras"]    = "光环"
 L["Filters"]  = "过滤"
 L["Profiles"] = "配置"
 L["About"]    = "关于"
+L["Changelog"] = "更新日志"
 
 L["Profile '%s' already exists. Overwrite?"] = "配置 '%s' 已存在，是否覆盖？"
 

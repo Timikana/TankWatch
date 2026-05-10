@@ -13,6 +13,7 @@ L["Auras"]    = "Auras"
 L["Filters"]  = "Filtros"
 L["Profiles"] = "Perfiles"
 L["About"]    = "Acerca de"
+L["Changelog"] = "Novedades"
 
 L["Profile '%s' already exists. Overwrite?"] = "El perfil '%s' ya existe. ¿Sobrescribir?"
 

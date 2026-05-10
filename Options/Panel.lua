@@ -7,6 +7,119 @@ local pairs, ipairs = pairs, ipairs
 local panel
 local refresh = function() if TW.RefreshAll then TW:RefreshAll() end end
 
+-- Tracks the section currently being built. Each widget factory tags
+-- its widget with this so collapsable sections know what to hide.
+-- ============================================================
+-- SECTION SYSTEM (port of BossWatch's container-based collapse)
+-- Each section is a Frame chained TOPLEFT→prev.BOTTOMLEFT. Widgets
+-- get reparented to that container. Collapsing shrinks the container,
+-- and everything below slides up automatically thanks to the chain.
+-- ============================================================
+local _currentSection   = nil
+local _lastSectionOnPage = {}   -- [pageContent] = last section built
+local _allSectionsOnPage = {}   -- [pageContent] = { sec1, sec2, ... } in order
+
+-- Tab badge wiring: populated when tabs are created. Search uses it to
+-- decorate tab labels with hit counts.
+local _searchTabRefs = {}
+
+-- Forward decl: actual implementation lives inside build() so it can close
+-- over `pages`, `selectTab`, the results page, etc. The search box just
+-- calls _applySearch() which delegates here.
+local _searchImpl = function() end
+local function _applySearch(q) return _searchImpl(q) end
+
+local SECTION_GAP      = 8
+local COLLAPSED_HEIGHT = 22
+
+local function _cloneDefault(v)
+    if type(v) ~= "table" then return v end
+    local out = {}
+    for k, val in pairs(v) do out[k] = _cloneDefault(val) end
+    return out
+end
+
+local function _refreshHeightsForPage(parent)
+    local list = _allSectionsOnPage[parent]
+    if not list then return end
+    -- Re-apply collapsed state now that children have been registered.
+    -- (SetCollapsed runs during makeSection() with empty children, so any
+    -- widgets registered afterwards stay visible until we hide them here.)
+    for _, s in ipairs(list) do
+        if s._collapsed then
+            for _, w in ipairs(s.children) do if w.Hide then w:Hide() end end
+            s.container:SetHeight(COLLAPSED_HEIGHT)
+        elseif s.UpdateNaturalHeight then
+            s:UpdateNaturalHeight()
+        end
+    end
+end
+
+-- Reparent a widget onto the section container, rebasing its anchor so it
+-- moves with the container when sections above collapse/expand. Also stash
+-- _homeContainer + _homeAnchors so the search-results page can move the
+-- widget out and put it back when the search is cleared.
+local function _captureAndReparent(widget, container, sectionOriginY)
+    if not widget or not widget.GetPoint or not widget.SetPoint or not widget.SetParent then return end
+    local nPoints = widget.GetNumPoints and widget:GetNumPoints() or 0
+    if nPoints == 0 then return end
+    local pageRoot = container:GetParent()
+    local saved = {}
+    for i = 1, nPoints do
+        local p, relTo, relPoint, x, y = widget:GetPoint(i)
+        saved[i] = { p = p, relTo = relTo, relPoint = relPoint, x = x or 0, y = y or 0 }
+    end
+    widget:SetParent(container)
+    widget:ClearAllPoints()
+    widget._homeContainer = container
+    widget._homeAnchors   = {}
+
+    -- Auto-flow: widgets originally placed in the right column (x >= 240 in
+    -- the 700-wide reference layout) get re-anchored to the container's
+    -- TOPRIGHT, preserving their original right-edge offset. As the panel
+    -- resizes wider, col2 widgets follow the right edge instead of leaving
+    -- a growing dead band in the middle.
+    local COL2_THRESHOLD = 240
+    local REFERENCE_W    = 700
+
+    for i, a in ipairs(saved) do
+        local newY  = a.y
+        local relTo = a.relTo
+        local newP, newRP, newX = a.p, a.relPoint, a.x
+        if a.relTo == pageRoot or a.relTo == nil then
+            relTo = container
+            newY  = a.y - sectionOriginY
+            -- Skip FontStrings/Textures: width is content-driven and re-anchoring
+            -- against TOPRIGHT changes their visible position ambiguously,
+            -- which breaks chained widgets anchored to them.
+            local oType   = (widget.GetObjectType and widget:GetObjectType()) or ""
+            local widgetW = (widget.GetWidth and widget:GetWidth()) or 0
+            local isFrame = oType ~= "FontString" and oType ~= "Texture"
+            if isFrame and a.x >= COL2_THRESHOLD and widgetW > 0 and a.p == "TOPLEFT" then
+                local rightMargin = REFERENCE_W - (a.x + widgetW)
+                if rightMargin < 4 then rightMargin = 4 end
+                newP  = "TOPRIGHT"
+                newRP = "TOPRIGHT"
+                newX  = -rightMargin
+            end
+        end
+        widget:SetPoint(newP, relTo, newRP, newX, newY)
+        widget._homeAnchors[i] = { p = newP, relTo = relTo, relPoint = newRP, x = newX, y = newY }
+    end
+end
+
+local function _registerInSection(w)
+    if _currentSection and w then
+        _captureAndReparent(w, _currentSection.container, _currentSection._originalY)
+        w._homeSection = _currentSection
+        _currentSection.children[#_currentSection.children + 1] = w
+        -- If the section was restored as collapsed BEFORE any children
+        -- were registered, newcomers would otherwise stay visible and
+        -- bleed over the next section. Hide them on registration.
+        if _currentSection._collapsed and w.Hide then w:Hide() end
+    end
+end
+
 -- ============================================================
 -- "NEW" BADGE
 -- ============================================================
@@ -106,7 +219,9 @@ local function makeSlider(parent, label, key, minV, maxV, step, x, y, width)
     end, sl)
 
     sl.refresh = function() sl:Init(readDB(), minV, maxV, numSteps, formatters) end
-    return sl
+    sl._searchText  = label or ""
+    sl._searchGroup = { sl }
+    _registerInSection(sl); return sl
 end
 
 local function makeCheck(parent, label, key, x, y)
@@ -121,20 +236,25 @@ local function makeCheck(parent, label, key, x, y)
         TW:GetDB()[key] = self:GetChecked() and true or false
         refresh()
     end)
-    return cb
+    cb._searchText  = label or ""
+    cb._searchGroup = { cb }
+    _registerInSection(cb); return cb
 end
 
 local function makeDropdown(parent, label, key, options, x, y, width)
-    local labelFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    labelFS:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    labelFS:SetText(label)
-
+    -- Dropdown body is the anchor parent (so col2 auto-flow works), label
+    -- sits ABOVE it — visual position identical to the old layout where the
+    -- label was parent.
     local dd = CreateFrame("DropdownButton", "TWOpt_DD_"..key, parent, "WowStyle1DropdownTemplate")
-    dd:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", 0, -2)
     dd:SetWidth(width or 160)
+    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
     dd.dbKey = key
     dd._options = options
     dd._label = label
+
+    local labelFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    labelFS:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 0, 2)
+    labelFS:SetText(label)
 
     dd:SetupMenu(function(_, rootDescription)
         for _, opt in ipairs(options) do
@@ -147,7 +267,14 @@ local function makeDropdown(parent, label, key, options, x, y, width)
         end
     end)
     dd.refresh = function() dd:GenerateMenu() end
-    return dd
+    -- Searchable: collect option texts so the search bar can match them
+    local optTexts = {}
+    for _, o in ipairs(options) do optTexts[#optTexts + 1] = o.text end
+    dd._optionTexts = table.concat(optTexts, " ")
+    dd._searchText  = (label or "") .. " " .. dd._optionTexts
+    dd._searchGroup = { dd, labelFS }
+    _registerInSection(dd)
+    _registerInSection(labelFS); return dd
 end
 
 local POPUP_ITEM_H = 22
@@ -156,13 +283,15 @@ local POPUP_VISIBLE = 12
 local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
     width = width or 180
 
-    local labelFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    labelFS:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    labelFS:SetText(label)
-
+    -- btn (dropdown body) is the anchor parent so col2 auto-flow works;
+    -- the label sits above it.
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(width, 24)
-    btn:SetPoint("TOPLEFT", labelFS, "BOTTOMLEFT", 0, -4)
+    btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 18)
+
+    local labelFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    labelFS:SetPoint("BOTTOMLEFT", btn, "TOPLEFT", 0, 4)
+    labelFS:SetText(label)
     btn:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -340,6 +469,14 @@ local function makeMediaDropdown(parent, label, key, mediaType, x, y, width)
         applyPreview(cur)
     end
     btn.refresh()
+    btn._searchText  = label or ""
+    btn._searchGroup = { btn, labelFS, previewBg, previewBorder, (previewTex or previewText) }
+    _registerInSection(btn)
+    _registerInSection(labelFS)
+    _registerInSection(previewBg)
+    _registerInSection(previewBorder)
+    if previewTex  then _registerInSection(previewTex)  end
+    if previewText then _registerInSection(previewText) end
     return btn
 end
 
@@ -441,38 +578,223 @@ local function makeColorPicker(parent, label, dbKey, x, y)
         end
     end)
 
+    btn._searchText  = label or ""
+    btn._searchGroup = lab and { lab, btn } or { btn }
+    if lab then _registerInSection(lab) end
+    _registerInSection(btn)
     return btn
 end
 
--- Section header with title + thin gold separator line.
--- Both line endpoints anchored to parent at the same y to avoid diagonal/aliased rendering.
+-- Container-based section: a Frame chained TOPLEFT→prev.BOTTOMLEFT.
+-- Widgets get reparented onto sec.container; collapsing shrinks the container,
+-- everything below slides up automatically.
 local function makeSection(parent, title, x, y)
-    local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    header:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    header:SetText(title)
-    header:SetTextColor(1, 0.82, 0)
+    local section = {
+        children   = {},
+        title      = title,
+        _searchText = (title or ""):lower(),
+        _originalY = y,
+        _parent    = parent,
+    }
 
-    local line = parent:CreateTexture(nil, "OVERLAY")
+    local container = CreateFrame("Frame", nil, parent)
+    local prev = _lastSectionOnPage[parent]
+    if prev then
+        container:SetPoint("TOPLEFT",  prev.container, "BOTTOMLEFT", 0, -SECTION_GAP)
+        container:SetPoint("TOPRIGHT", parent,         "TOPRIGHT",   0,  0)
+    else
+        container:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, y)
+        container:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, y)
+    end
+    container:SetHeight(COLLAPSED_HEIGHT)
+    section.container = container
+    _lastSectionOnPage[parent] = section
+    _allSectionsOnPage[parent] = _allSectionsOnPage[parent] or {}
+    _allSectionsOnPage[parent][#_allSectionsOnPage[parent] + 1] = section
+
+    -- Header inside container at (x, 0)
+    local header = container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    header:SetPoint("TOPLEFT", container, "TOPLEFT", x, 0)
+    header:SetTextColor(1, 0.82, 0)
+    header:SetText(title)
+    section.header = header
+    parent._sectionHeaders = parent._sectionHeaders or {}
+    parent._sectionHeaders[#parent._sectionHeaders + 1] = { title = title, region = header }
+
+    -- Plus/Minus chevron next to header
+    local fold = CreateFrame("Button", nil, container)
+    fold:SetSize(14, 14)
+    fold:SetPoint("LEFT", header, "RIGHT", 4, -1)
+    section.fold = fold
+
+    -- Invisible click strip covering the entire header row (title + separator
+    -- line) so clicking anywhere on the bar toggles the section. Excludes
+    -- the chevron at the left and the reset button on the right so those
+    -- still get their own clicks.
+    local clickArea = CreateFrame("Button", nil, container)
+    clickArea:SetPoint("TOPLEFT",  container, "TOPLEFT",  x - 14, -2)
+    clickArea:SetPoint("TOPRIGHT", container, "TOPRIGHT", -40,    -2)
+    clickArea:SetHeight(18)
+    clickArea:RegisterForClicks("LeftButtonUp")
+    -- Make sure the strip sits above the header texture / line so clicks
+    -- on the bar always hit it. Sibling buttons (fold chevron, reset btn)
+    -- get explicit higher levels so they keep their own clicks.
+    clickArea:SetFrameLevel((container:GetFrameLevel() or 0) + 1)
+    section.clickArea = clickArea
+
+    local TEX_EXPANDED  = "Interface\\Buttons\\UI-MinusButton-Up"
+    local TEX_COLLAPSED = "Interface\\Buttons\\UI-PlusButton-Up"
+    fold:SetNormalTexture(TEX_EXPANDED)
+    fold:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    fold:SetFrameLevel((container:GetFrameLevel() or 0) + 5)
+
+    -- Reset button (refresh icon at the far right of the section row)
+    local btnReset = CreateFrame("Button", nil, container)
+    btnReset:SetSize(14, 14)
+    btnReset:SetPoint("TOPRIGHT", container, "TOPRIGHT", -14, -1)
+    btnReset:SetNormalTexture("Interface\\Buttons\\UI-RefreshButton")
+    btnReset:GetNormalTexture():SetTexCoord(0.05, 0.95, 0.05, 0.95)
+    btnReset:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    btnReset:SetFrameLevel((container:GetFrameLevel() or 0) + 5)
+    btnReset:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine((L["Reset section"] or "Reset section") .. " — " .. title, 1, 1, 1)
+        GameTooltip:AddLine(L["Click to restore default values for this section"] or
+            "Click to restore default values for this section", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end)
+    btnReset:SetScript("OnLeave", GameTooltip_Hide)
+    section.btnReset = btnReset
+
+    -- Gold separator line, anchored inside the container
+    local line = container:CreateTexture(nil, "OVERLAY")
     line:SetHeight(1)
     line:SetColorTexture(1, 0.82, 0, 0.55)
-
-    local function place()
-        local w = header:GetStringWidth() or 0
+    section.line = line
+    local function placeLine()
+        local hw = header:GetStringWidth() or 0
         line:ClearAllPoints()
-        line:SetPoint("TOPLEFT",  parent, "TOPLEFT",  x + w + 10, y - 7)
-        line:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -14,        y - 7)
+        line:SetPoint("TOPLEFT",  container, "TOPLEFT",  x + hw + 4 + 14 + 8, -7)
+        line:SetPoint("TOPRIGHT", container, "TOPRIGHT", -42, -7)
     end
-    place()
-    C_Timer.After(0, place)
-    return header
+    placeLine()
+    C_Timer.After(0, placeLine)
+
+    function section:UpdateNaturalHeight()
+        if self._collapsed then
+            self.container:SetHeight(COLLAPSED_HEIGHT)
+            return
+        end
+        local cTop = self.container:GetTop()
+        if not cTop then
+            C_Timer.After(0, function() self:UpdateNaturalHeight() end)
+            return
+        end
+        local lowest = cTop
+        for _, w in ipairs(self.children) do
+            if w.IsShown and w:IsShown() and w.GetBottom then
+                local b = w:GetBottom()
+                if b and b < lowest then lowest = b end
+            end
+        end
+        local span = math.max(COLLAPSED_HEIGHT, cTop - lowest + 8)
+        self.container:SetHeight(span)
+    end
+
+    function section:SetCollapsed(state, persist)
+        state = state and true or false
+        for _, w in ipairs(self.children) do
+            if state then if w.Hide then w:Hide() end
+            else            if w.Show then w:Show() end end
+        end
+        line:SetShown(not state)
+        fold:SetNormalTexture(state and TEX_COLLAPSED or TEX_EXPANDED)
+        header:SetTextColor(state and 0.7 or 1, state and 0.6 or 0.82, state and 0.2 or 0)
+        self._collapsed = state
+        if state then
+            self.container:SetHeight(COLLAPSED_HEIGHT)
+        else
+            self:UpdateNaturalHeight()
+        end
+        if persist then
+            TankWatchDB = TankWatchDB or {}
+            TankWatchDB.collapsedSections = TankWatchDB.collapsedSections or {}
+            TankWatchDB.collapsedSections[title] = state or nil
+        end
+    end
+
+    function section:Toggle() self:SetCollapsed(not self._collapsed, true) end
+
+    function section:ResetToDefaults()
+        local db = TW:GetDB()
+        for _, w in ipairs(self.children) do
+            if w.dbKey and TW.Defaults and TW.Defaults[w.dbKey] ~= nil then
+                db[w.dbKey] = _cloneDefault(TW.Defaults[w.dbKey])
+            end
+        end
+        if TW.RefreshAll then TW:RefreshAll() end
+        if TW.ApplyFonts  then TW:ApplyFonts()  end
+        if panel and panel.refreshAll then panel.refreshAll() end
+    end
+
+    fold:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine((section._collapsed and (L["Expand section"] or "Expand section"))
+            or (L["Collapse section"] or "Collapse section"), 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    fold:SetScript("OnLeave", GameTooltip_Hide)
+    fold:SetScript("OnClick", function() section:Toggle() end)
+    clickArea:SetScript("OnClick", function() section:Toggle() end)
+    clickArea:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine((section._collapsed and (L["Expand section"] or "Expand section"))
+            or (L["Collapse section"] or "Collapse section"), 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    clickArea:SetScript("OnLeave", GameTooltip_Hide)
+    btnReset:SetScript("OnClick", function() section:ResetToDefaults() end)
+
+    -- Restore prior collapsed state from DB (key = title, simple and stable enough)
+    TankWatchDB = TankWatchDB or {}
+    local restored = TankWatchDB.collapsedSections and TankWatchDB.collapsedSections[title]
+    section:SetCollapsed(restored or false, false)
+
+    -- Subsequent makeXxx() / _registerInSection() calls attach to this section.
+    _currentSection = section
+    return section
 end
 
 -- Hover tooltip helper. Hooks the widget AND known sub-controls of composite widgets.
+-- Also appends a "Default: X" line if the widget has a dbKey with a default in TW.Defaults.
+-- Stores `text` on widget._tooltip so the search bar can match it too.
 local function addTooltip(widget, text)
     if not widget or not text or text == "" then return widget end
+    widget._tooltip = text
+    -- Index for the search bar: append the tooltip body so users can search by
+    -- description, not just label. Lower-cased once at build time.
+    widget._searchText = ((widget._searchText or "") .. " " .. text):lower()
+    local function defaultStr(self)
+        local key = self.dbKey
+        if not key or not TW.Defaults or TW.Defaults[key] == nil then return nil end
+        local d = TW.Defaults[key]
+        local t = type(d)
+        if t == "boolean" then return d and "ON" or "OFF"
+        elseif t == "number" then return tostring(d)
+        elseif t == "string" then return d
+        end
+        return nil
+    end
     local function show(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(text, 1, 1, 1, true)
+        local owner = self
+        -- Bubble up to find the actual dbKey-bearing widget (for slider sub-controls)
+        while owner and not owner.dbKey do owner = owner.GetParent and owner:GetParent() end
+        if owner then
+            local d = defaultStr(owner)
+            if d then GameTooltip:AddLine((L["Default: "] or "Default: ") .. d, 0.6, 0.6, 0.6) end
+        end
         GameTooltip:Show()
     end
     local function hide() GameTooltip:Hide() end
@@ -543,10 +865,12 @@ local function buildLayoutPage(page)
     btnMover:SetText(L["Unlock / Lock Mover"])
     btnMover:SetScript("OnClick", function() TW:ToggleMover() end)
     addTooltip(btnMover, L["Toggle a draggable handle on the tank container so you can move it on screen."])
+    _registerInSection(btnMover)
 
     local label = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("TOPLEFT", 184, y - 4)
     label:SetText(L["Test:"])
+    _registerInSection(label)
 
     local function currentTestCount()
         local n = 0
@@ -564,18 +888,27 @@ local function buildLayoutPage(page)
         end
     end
 
-    local xs = 220
+    -- Chain all test buttons relative to each other so the auto-flow doesn't
+    -- separate them when the panel is resized (Off stays TOPLEFT to page, the
+    -- numeric buttons follow Off's RIGHT edge).
+    local prevB
     for _, count in ipairs({ 0, 1, 2, 3, 4, 5, 6, 8 }) do
         local b = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
-        b:SetSize(34, 22)
-        b:SetPoint("TOPLEFT", xs, y)
+        local bw = (count == 0) and 44 or 30
+        b:SetSize(bw, 22)
+        if prevB then
+            b:SetPoint("LEFT", prevB, "RIGHT", 4, 0)
+        else
+            b:SetPoint("TOPLEFT", page, "TOPLEFT", 220, y)
+        end
         b:SetText(count == 0 and L["Off"] or tostring(count))
         b._count = count
         b:SetScript("OnClick", function() TW:SetTestMode(count); refreshTestBtns() end)
         addTooltip(b, count == 0 and L["Stop the simulation."]
             or format(L["Simulate %d tank frame(s) with fake debuffs and HP."], count))
         testBtns[#testBtns + 1] = b
-        xs = xs + 36
+        _registerInSection(b)
+        prevB = b
     end
     refreshTestBtns()
 
@@ -604,6 +937,7 @@ local function buildLayoutPage(page)
         cbMini:SetChecked(not (g.minimap and g.minimap.hide))
     end
     addTooltip(cbMini, L["Show a minimap button. Left-click: options, right-click: toggle mover."])
+    _registerInSection(cbMini)
 
     y = y - 32
 
@@ -831,6 +1165,7 @@ local function buildAurasPage(page)
     note:SetPoint("TOPLEFT", 14, y)
     note:SetWidth(680); note:SetJustifyH("LEFT")
     note:SetText(L["By default only boss-cast HARMFUL auras show. Use the Filters tab to whitelist M+ debuffs or blacklist noise."])
+    _registerInSection(note)
     y = y - 32
 
     -- ============ ICONS (size + layout merged) ============
@@ -1001,6 +1336,11 @@ local function makeSpellList(parent, dbKey, title, x, y, w, h)
     addBtn:SetScript("OnClick", doAdd)
     edit:SetScript("OnEnterPressed", function(self) doAdd(); self:ClearFocus() end)
 
+    _registerInSection(header)
+    _registerInSection(frame)
+    _registerInSection(addLabel)
+    _registerInSection(edit)
+    _registerInSection(addBtn)
     return { refresh = refresh }
 end
 
@@ -1082,6 +1422,11 @@ local function makeNameList(parent, dbKey, title, x, y, w, h)
     addBtn:SetScript("OnClick", doAdd)
     edit:SetScript("OnEnterPressed", function(self) doAdd(); self:ClearFocus() end)
 
+    _registerInSection(header)
+    _registerInSection(frame)
+    _registerInSection(addLabel)
+    _registerInSection(edit)
+    _registerInSection(addBtn)
     return { refresh = refresh }
 end
 
@@ -1372,14 +1717,13 @@ local function buildProfilesPage(page)
     -- ============ PRESETS ============
     -- Applying a preset creates a NEW profile (clone of current + preset
     -- overrides) and switches to it. Original profile is preserved.
-    local presetY = -340
     local presetHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    presetHeader:SetPoint("TOPLEFT", 14, presetY)
+    presetHeader:SetPoint("TOPLEFT", btnImport, "BOTTOMLEFT", 0, -18)
     presetHeader:SetText(L["Presets"])
     presetHeader:SetTextColor(1, 0.82, 0)
 
     local presetLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    presetLabel:SetPoint("TOPLEFT", 14, presetY - 22)
+    presetLabel:SetPoint("TOPLEFT", presetHeader, "BOTTOMLEFT", 0, -6)
     presetLabel:SetText(L["Apply preset (creates a new profile, original preserved)"])
 
     local presetDD = CreateFrame("DropdownButton", "TWOpt_DD_preset", page, "WowStyle1DropdownTemplate")
@@ -1435,6 +1779,192 @@ local function buildProfilesPage(page)
         refreshExport()
         charLabel:SetText(L["Character:"] .. " |cffffffff" .. TW:GetCharKey() .. "|r")
     end
+end
+
+-- ============================================================
+-- CHANGELOG PAGE — renders CHANGELOG-like content from an embedded
+-- string. Versions in gold, bullets in white. Scrollable.
+-- ============================================================
+local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.3.0
+
+|cffffd700New|r — Compact mode (now default for fresh installs)
+- Class icon + boss-cast debuffs only. HP/power/absorb/name all hidden.
+- Toggle in Layout > General. Sub-option to hide the class icon (auras only).
+
+|cffffd700New|r — Display presets (Profiles tab)
+- Full / Compact / Minimal preset dropdown.
+- Non-destructive: clones your current profile, overlays preset display flags.
+
+|cffffd700New|r — Power bar
+- Optional rage / mana / runic / energy / fury / pain bar below HP.
+- Auto-colored by power type or custom color, LSM texture.
+
+|cffffd700Improved|r — Test mode
+- HP and absorbs animate, debuff durations cycle, stacks change live,
+  power bars tick at different rates per power type.
+
+|cffffd700Fixed|r
+- Removed unreliable HP/power format dropdowns (12.0 secret-value issues).
+- HP/name text always render above the absorb shield overlay.
+- Mover handle floats above tank frames so it can be dragged.
+
+## v1.2.2
+
+- Reorganized options panel: Range Fade in Layout, merged Health-bar
+  texture/color, merged Aura Size+Layout into Icons, panel-opacity moved
+  to About > Options window.
+- 552 new translations across 8 languages (deDE/esES/itIT/ptBR/ruRU/koKR/zhCN/zhTW).
+- Tooltips also appear on slider sub-controls (steppers, thumb).
+
+## v1.2.1
+
+- Discord invite link added in the About tab.
+
+## v1.2.0
+
+|cffffd700New|r — Absorb shield
+- Translucent shield bar overlaid on the HP bar (Death Strike, WoG, etc.).
+- Sky-blue by default, fully customizable, LSM texture, side-flip.
+
+|cffffd700Improved|r
+- Mover handle floats above tank frames.
+- Tighter spacing on Bars tab (no overlap between texture preview and side dropdown).
+
+|cffffd700Fixed|r
+- Removed Percent / Current+Percent HP formats — unreliable on group members in 12.0.
+
+|cffffd700Packaging|r
+- All bundled libs (LibStub, CallbackHandler, LibSharedMedia, LibDataBroker)
+  now show in CurseForge "Embedded Libraries" with correct versions.
+
+## v1.1.5
+
+- Profile import overwrite-confirmation dialog translated in 9 languages.
+
+## v1.1.4
+
+- Importing a profile with an existing name now asks
+  "Profile 'X' already exists. Overwrite?".
+
+## v1.1.3
+
+- Fixed the green portrait placeholder on some setups (logo now shows correctly).
+
+## v1.1.2
+
+- logo.png shipped in the package so the portrait icon shows from CurseForge.
+
+## v1.1.1
+
+- Fixed crash on the profile-name dialog (New / Import).
+
+## v1.1.0
+
+|cffffd700New|r — Modern options panel
+- Redesigned with Blizzard's modern panel template.
+- ESC closes the panel.
+- Adjustable panel opacity, full tooltips on every control.
+- Gold section dividers, smooth scrolling on long pages.
+- CurseForge and Wago.io links in About.
+
+## v1.0.4
+
+- Auto-shows in Titan Panel / ChocolateBar via LibDataBroker launcher.
+- "NEW" badge on freshly added options (clears on first hover/click).
+- 8 new locale stubs (deDE/esES/itIT/ptBR/ruRU/koKR/zhCN/zhTW).
+
+## v1.0.3
+
+- Released on Wago.io alongside CurseForge.
+
+## v1.0.2
+
+- Background customization (color/texture, custom or class color, alpha).
+- Right-click while moving locks the position.
+
+## v1.0.1
+
+- Fixed a critical issue that could prevent clicking on bag items while
+  TankWatch was loaded.
+- Mover overlay matches actual visible content size.
+
+## v1.0.0
+
+- First public release on CurseForge.
+- Tank detection (raid role / /maintank / 5-man / solo).
+- Boss-cast debuff icons with the |cffffd700stack count rendered HUGE in the
+  icon center|r — the headline feature.
+- Whitelist / blacklist by spell ID (great for M+ trash debuffs).
+- Per-character profiles with export / import.
+]]
+
+local function buildChangelogPage(page)
+    _currentSection = nil  -- raw content, no sections
+
+    -- Parse the embedded markdown source into entries:
+    --   ## vX.Y.Z  → new entry (version header, large gold)
+    --   - …        → bullet line
+    --   |cffffd700…|r heading lines (Nouveau / Amélioré) keep their color
+    local entries = {}
+    local cur
+    for raw in (CHANGELOG_TEXT .. "\n"):gmatch("([^\n]*)\n") do
+        local v = raw:match("^##%s*(.+)$")
+        if v then
+            cur = { ver = v, lines = {} }
+            entries[#entries + 1] = cur
+        elseif cur then
+            local bullet = raw:match("^%-%s+(.+)$")
+            if bullet then
+                cur.lines[#cur.lines + 1] = { kind = "bullet", text = bullet }
+            elseif raw:match("^%s*$") then
+                -- skip blanks
+            elseif raw:match("^%s%s") then
+                -- continuation line of previous bullet (markdown-style indent)
+                local last = cur.lines[#cur.lines]
+                if last then last.text = last.text .. " " .. raw:gsub("^%s+", "") end
+            else
+                cur.lines[#cur.lines + 1] = { kind = "subhead", text = raw }
+            end
+        end
+    end
+
+    local y = -10
+    for _, entry in ipairs(entries) do
+        local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", 14, y)
+        title:SetText("|cffeda14a" .. entry.ver .. "|r")
+        y = y - 24
+
+        for _, line in ipairs(entry.lines) do
+            local fs
+            if line.kind == "subhead" then
+                fs = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                fs:SetPoint("TOPLEFT", 18, y)
+                fs:SetWidth(660)
+                fs:SetJustifyH("LEFT")
+                fs:SetSpacing(2)
+                fs:SetText(line.text)
+                local rows = math.max(1, math.ceil(#line.text / 100))
+                y = y - (rows * 16 + 4)
+            else
+                fs = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                fs:SetPoint("TOPLEFT", 28, y)
+                fs:SetWidth(640)
+                fs:SetJustifyH("LEFT")
+                fs:SetSpacing(2)
+                fs:SetText("• " .. line.text)
+                local rows = math.max(1, math.ceil(#line.text / 95))
+                y = y - (rows * 16 + 4)
+            end
+        end
+        y = y - 14
+    end
+
+    local hint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", 14, y - 6)
+    hint:SetText(L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"]
+        or "Full GitHub history: https://github.com/Timikana/TankWatch/releases")
 end
 
 local function buildAboutPage(page)
@@ -1559,15 +2089,30 @@ local function build()
     end
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
-    panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+    panel:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        TankWatchDB = TankWatchDB or {}
+        TankWatchDB.panelPos = {
+            point  = "TOPLEFT",
+            relTo  = "UIParent",
+            relPt  = "BOTTOMLEFT",
+            x      = self:GetLeft() or 0,
+            y      = self:GetTop()  or 0,
+        }
+    end)
     panel:SetFrameStrata("HIGH")
     panel:Hide()
     panel:SetClampedToScreen(true)
 
-    -- Restore saved size (account-wide)
+    -- Restore saved size + position (account-wide)
     TankWatchDB = TankWatchDB or {}
     if TankWatchDB.panelSize and TankWatchDB.panelSize.w and TankWatchDB.panelSize.h then
         panel:SetSize(TankWatchDB.panelSize.w, TankWatchDB.panelSize.h)
+    end
+    if TankWatchDB.panelPos and TankWatchDB.panelPos.x and TankWatchDB.panelPos.y then
+        panel:ClearAllPoints()
+        panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
+            TankWatchDB.panelPos.x, TankWatchDB.panelPos.y)
     end
 
     -- Close on ESC
@@ -1629,13 +2174,164 @@ local function build()
         end)
     end
 
-    pages.layout   = newPage("layout");   buildLayoutPage(pages.layout.content);     autoFitPage(pages.layout)
-    pages.bars     = newPage("bars");     buildBarsPage(pages.bars.content);         autoFitPage(pages.bars)
-    pages.text     = newPage("text");     buildTextPage(pages.text.content);         autoFitPage(pages.text)
-    pages.auras    = newPage("auras");    buildAurasPage(pages.auras.content);       autoFitPage(pages.auras)
-    pages.filters  = newPage("filters");  buildFiltersPage(pages.filters.content);   autoFitPage(pages.filters)
-    pages.profiles = newPage("profiles"); buildProfilesPage(pages.profiles.content); autoFitPage(pages.profiles)
-    pages.about    = newPage("about");    buildAboutPage(pages.about.content);       autoFitPage(pages.about)
+    -- Each buildXxxPage starts with _currentSection = nil so widgets created
+    -- before the first makeSection don't get tagged with a stale section.
+    local function buildPage(name, fn)
+        local sf = newPage(name); _currentSection = nil
+        fn(sf.content)
+        -- Recompute every section's natural height once anchors resolve.
+        C_Timer.After(0, function() _refreshHeightsForPage(sf.content) end)
+        autoFitPage(sf); return sf
+    end
+    pages.layout   = buildPage("layout",   buildLayoutPage)
+    pages.bars     = buildPage("bars",     buildBarsPage)
+    pages.text     = buildPage("text",     buildTextPage)
+    pages.auras    = buildPage("auras",    buildAurasPage)
+    pages.filters  = buildPage("filters",  buildFiltersPage)
+    pages.profiles = buildPage("profiles", buildProfilesPage)
+    pages.about    = buildPage("about",    buildAboutPage)
+    pages.changelog= buildPage("changelog", buildChangelogPage)
+    _currentSection = nil
+
+    -- ========================================================
+    -- Hidden "search results" page — not in the tab list. When the search
+    -- box has a query, every matching widget group is reparented here on
+    -- the fly with a breadcrumb pointing back to its real tab/section.
+    -- ========================================================
+    local resultsPage = newPage("results")
+    local resultsContent = resultsPage.content
+    pages._results = resultsPage
+
+    local breadcrumbPool = {}
+    local activeMatches = {}
+    local lastNormalTabId = "layout"
+
+    local function _moveGroupToResults(w, y)
+        if not w._searchGroup then return y end
+        for _, comp in ipairs(w._searchGroup) do
+            if comp and comp.SetParent then
+                comp:SetParent(resultsContent)
+                if comp.Show then comp:Show() end
+            end
+        end
+        local leader = w._searchGroup[1]
+        if leader and leader.ClearAllPoints then
+            leader:ClearAllPoints()
+            leader:SetPoint("TOPLEFT", resultsContent, "TOPLEFT", 14, y)
+        end
+        return y - 64
+    end
+
+    local function _restoreGroupHome(w)
+        if not w._searchGroup then return end
+        for _, comp in ipairs(w._searchGroup) do
+            if comp and comp._homeContainer and comp.SetParent then
+                comp:SetParent(comp._homeContainer)
+            end
+            if comp and comp._homeAnchors and comp.ClearAllPoints then
+                comp:ClearAllPoints()
+                for _, a in ipairs(comp._homeAnchors) do
+                    comp:SetPoint(a.p, a.relTo, a.relPoint, a.x, a.y)
+                end
+            end
+        end
+    end
+
+    local function _gatherMatches(query)
+        local matches = {}
+        for _, sections in pairs(_allSectionsOnPage) do
+            for _, section in ipairs(sections) do
+                for _, w in ipairs(section.children) do
+                    local txt = w._searchText
+                    if txt and w._searchGroup and txt:lower():find(query, 1, true) then
+                        matches[#matches + 1] = w
+                    end
+                end
+            end
+        end
+        return matches
+    end
+
+    _searchImpl = function(rawQuery)
+        local q = (rawQuery or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        local empty = (q == "")
+
+        -- Always restore prior results state first
+        for _, w in ipairs(activeMatches) do _restoreGroupHome(w) end
+        wipe(activeMatches)
+        for _, fs in ipairs(breadcrumbPool) do fs:Hide() end
+
+        if empty then
+            resultsPage:Hide()
+            for _, p in pairs(pages) do
+                if p ~= resultsPage then p:Hide() end
+            end
+            if pages[lastNormalTabId] then pages[lastNormalTabId]:Show() end
+            for _, ref in ipairs(_searchTabRefs) do
+                ref.btn:SetText(ref.label)
+                if PanelTemplates_TabResize then PanelTemplates_TabResize(ref.btn, 0) end
+            end
+            return
+        end
+
+        local matches = _gatherMatches(q)
+
+        for _, p in pairs(pages) do
+            if p ~= resultsPage then p:Hide() end
+        end
+
+        local hitsByPage = {}
+        local y = -10
+        for i, w in ipairs(matches) do
+            local fs = breadcrumbPool[i]
+            if not fs then
+                fs = resultsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+                breadcrumbPool[i] = fs
+            end
+            fs:Show()
+            fs:ClearAllPoints()
+            fs:SetPoint("TOPLEFT", resultsContent, "TOPLEFT", 14, y)
+            local section = w._homeSection
+            local sectionTitle = (section and section.header and section.header:GetText()) or "?"
+            local pageContent = section and section._parent
+            local tabLabel = "?"
+            for _, ref in ipairs(_searchTabRefs) do
+                if ref.content == pageContent then tabLabel = ref.label; break end
+            end
+            fs:SetText("|cff888888" .. tabLabel .. "  >  " .. sectionTitle .. "|r")
+
+            if pageContent then hitsByPage[pageContent] = (hitsByPage[pageContent] or 0) + 1 end
+
+            y = y - 14
+            y = _moveGroupToResults(w, y)
+            activeMatches[#activeMatches + 1] = w
+        end
+
+        if #matches == 0 then
+            local fs = breadcrumbPool[1]
+            if not fs then
+                fs = resultsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                breadcrumbPool[1] = fs
+            end
+            fs:Show()
+            fs:ClearAllPoints()
+            fs:SetPoint("TOPLEFT", resultsContent, "TOPLEFT", 14, -20)
+            fs:SetText(L["No options match your search."] or "No options match your search.")
+        end
+
+        resultsContent:SetHeight(math.max(resultsPage:GetHeight(), math.abs(y) + 24))
+        resultsPage:Show()
+
+        for _, ref in ipairs(_searchTabRefs) do
+            local n = hitsByPage[ref.content] or 0
+            if n == 0 then
+                ref.btn:SetText(ref.label)
+            else
+                ref.btn:SetText(ref.label .. " |cffeda14a(" .. n .. ")|r")
+            end
+            if PanelTemplates_TabResize then PanelTemplates_TabResize(ref.btn, 0) end
+        end
+    end
 
     local tabs = {
         { id = "layout",   label = L["Layout"] },
@@ -1645,13 +2341,30 @@ local function build()
         { id = "filters",  label = L["Filters"] },
         { id = "profiles", label = L["Profiles"] },
         { id = "about",    label = L["About"] },
+        { id = "changelog",label = L["Changelog"] or "Changelog" },
     }
     local tabBtns = {}
+    local _savedScroll = {}     -- scroll offset memorized per tab
+    local _currentTabId = nil
     local function selectTab(id)
+        -- If a search is active, clear it first (which restores reparented widgets)
+        if searchBox and searchBox:GetText() ~= "" then
+            searchBox:SetText("")
+        end
+        lastNormalTabId = id
+        -- Save current tab's scroll position before switching
+        if _currentTabId and pages[_currentTabId] and pages[_currentTabId].GetVerticalScroll then
+            _savedScroll[_currentTabId] = pages[_currentTabId]:GetVerticalScroll()
+        end
         for _, p in pairs(pages) do p:Hide() end
         if pages[id] then
             local target = pages[id]
             target:Show()
+            -- Restore scroll for this tab (deferred to next frame after content shows)
+            if target.SetVerticalScroll then
+                local saved = _savedScroll[id] or 0
+                C_Timer.After(0, function() target:SetVerticalScroll(saved) end)
+            end
             -- Fade-in animation (quick, subtle)
             target:SetAlpha(0)
             local ag = target.fadeIn
@@ -1667,12 +2380,19 @@ local function build()
         for _, t in ipairs(tabBtns) do
             styleTabSelected(t, t.id == id)
         end
+        _currentTabId = id
     end
 
+    wipe(_searchTabRefs)
     for i, t in ipairs(tabs) do
         local b = makeTab(panel, t.id, t.label, tabBtns[i - 1])
         b:SetScript("OnClick", function() selectTab(t.id) end)
         tabBtns[#tabBtns + 1] = b
+        if pages[t.id] and pages[t.id].content then
+            _searchTabRefs[#_searchTabRefs + 1] = {
+                btn = b, content = pages[t.id].content, label = t.label,
+            }
+        end
     end
 
     -- ========================================================
@@ -1717,83 +2437,47 @@ local function build()
     end)
 
     -- ========================================================
-    -- Search bar (top-right of the panel) — filters widgets across
-    -- all tabs. Matches the L[label] of each tracked widget. On match,
-    -- highlights with a yellow glow border and switches to the first
-    -- match's tab.
+    -- Search bar (top-right) — port of BossWatch's results-page approach.
+    -- Matches widgets by `_searchText` (label + tooltip body, indexed at
+    -- build time) and reparents the matching `_searchGroup` onto a hidden
+    -- "results" page with a breadcrumb pointing back to the home tab/section.
+    -- Clearing the search restores every group to its `_homeContainer`.
     -- ========================================================
-    local searchBox = CreateFrame("EditBox", nil, panel, "SearchBoxTemplate")
-    searchBox:SetSize(180, 22)
-    searchBox:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -32, -32)
+    local searchBox = CreateFrame("EditBox", "TWOpt_Search", panel, "InputBoxTemplate")
+    searchBox:SetSize(200, 22)
+    searchBox:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -38, -32)
     searchBox:SetAutoFocus(false)
-    searchBox:SetMaxLetters(32)
-    searchBox:SetFontObject("GameFontHighlightSmall")
-    searchBox:SetFrameLevel(panel:GetFrameLevel() + 5)
+    searchBox:SetMaxLetters(40)
+    searchBox:SetFontObject("GameFontHighlight")
+    searchBox:SetTextInsets(20, 18, 0, 0)
 
-    local function collectAllWidgets()
-        local list = {}
-        local function walk(f)
-            for _, child in ipairs({f:GetChildren()}) do
-                if child._label and child.dbKey then list[#list + 1] = child end
-                walk(child)
-            end
-        end
-        for _, sf in pairs(pages) do walk(sf.content or sf) end
-        return list
-    end
+    local searchIcon = searchBox:CreateTexture(nil, "OVERLAY")
+    searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+    searchIcon:SetSize(14, 14)
+    searchIcon:SetPoint("LEFT", searchBox, "LEFT", 4, 0)
 
-    local _glowPool = {}
-    local function clearGlows()
-        for _, g in ipairs(_glowPool) do g:Hide() end
-    end
-    local function glow(widget)
-        local g
-        for _, x in ipairs(_glowPool) do
-            if not x:IsShown() then g = x; break end
-        end
-        if not g then
-            g = CreateFrame("Frame", nil, widget, "BackdropTemplate")
-            g:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
-            g:SetBackdropBorderColor(1, 0.85, 0, 1)
-            _glowPool[#_glowPool + 1] = g
-        end
-        g:SetParent(widget)
-        g:ClearAllPoints()
-        g:SetPoint("TOPLEFT", widget, "TOPLEFT", -3, 3)
-        g:SetPoint("BOTTOMRIGHT", widget, "BOTTOMRIGHT", 3, -3)
-        g:SetFrameLevel(widget:GetFrameLevel() + 1)
-        g:Show()
-    end
+    local searchPlaceholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+    searchPlaceholder:SetPoint("LEFT", searchIcon, "RIGHT", 4, 0)
+    searchPlaceholder:SetText(L["Search options…"] or "Search options…")
 
-    local function findTabFor(widget)
-        for tabId, sf in pairs(pages) do
-            local f = widget
-            while f and f ~= sf and f ~= sf.content do f = f:GetParent() end
-            if f == sf or f == sf.content then return tabId end
-        end
-    end
+    local searchClear = CreateFrame("Button", nil, searchBox)
+    searchClear:SetSize(16, 16)
+    searchClear:SetPoint("RIGHT", searchBox, "RIGHT", -2, 0)
+    searchClear:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+    searchClear:Hide()
 
-    local function performSearch(text)
-        clearGlows()
-        text = text and text:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
-        if text == "" then return end
-        local widgets = collectAllWidgets()
-        local first
-        for _, w in ipairs(widgets) do
-            local lab = w._label and w._label:lower() or ""
-            if lab:find(text, 1, true) then
-                glow(w)
-                if not first then first = w end
-            end
-        end
-        if first then
-            local tabId = findTabFor(first)
-            if tabId then selectTab(tabId) end
-        end
+    local function runSearch(text)
+        searchPlaceholder:SetShown(text == "")
+        searchClear:SetShown(text ~= "")
+        _applySearch(text)
     end
-
-    searchBox:HookScript("OnTextChanged", function(self) performSearch(self:GetText()) end)
-    searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); clearGlows() end)
+    searchBox:SetScript("OnTextChanged",   function(self) runSearch(self:GetText()) end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+    searchBox:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
+    searchClear:SetScript("OnClick",       function() searchBox:SetText(""); searchBox:ClearFocus() end)
+    addTooltip(searchBox, L["Filter the panel: type any keyword from a label or tooltip. Sections without a match are auto-collapsed."]
+        or "Filter the panel: type any keyword from a label or tooltip.")
+    addTooltip(searchClear, L["Clear the search."] or "Clear the search.")
 
     -- ========================================================
     -- Footer status bar — shows active profile, visible tank count

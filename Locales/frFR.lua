@@ -430,4 +430,132 @@ L["Drag to resize"] = "Glisser pour redimensionner"
 L["Right-click to reset size"] = "Clic droit : réinitialiser la taille"
 L["Profile"] = "Profil"
 L["tanks"]   = "tanks"
+L["Default: "] = "Défaut : "
+L["no match"]  = "aucun résultat"
+L["Reset section"] = "Réinitialiser la section"
+L["Click to restore default values for this section"] =
+    "Cliquer pour restaurer les valeurs par défaut de cette section"
+L["Expand section"]   = "Déplier la section"
+L["Collapse section"] = "Replier la section"
+L["Search options…"]  = "Rechercher des options…"
+L["Filter the panel: type any keyword from a label or tooltip. Sections without a match are auto-collapsed."] =
+    "Filtre le panneau : tape un mot-clé d'un label ou d'une infobulle. Les sections sans correspondance sont repliées."
+L["Clear the search."] = "Effacer la recherche."
+L["No options match your search."] = "Aucune option ne correspond à ta recherche."
+L["Changelog"] = "Nouveautés"
+L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
+    "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
+L["CHANGELOG_BODY"] = [[
+## v1.3.0
+
+|cffffd700Nouveau|r — Mode compact (devient le défaut pour les nouvelles installations)
+- Icône de classe + débuffs lancés par les boss uniquement. PV/ressource/bouclier/nom tous masqués.
+- Bascule dans Disposition > Général. Sous-option pour masquer l'icône de classe (debuffs uniquement).
+
+|cffffd700Nouveau|r — Préréglages d'affichage (onglet Profils)
+- Menu déroulant Complet / Compact / Minimal.
+- Non destructif : clone ton profil actuel et applique les flags d'affichage du préréglage par-dessus.
+
+|cffffd700Nouveau|r — Barre de ressource
+- Barre optionnelle (rage / mana / puissance runique / énergie / fureur / souffrance) sous les PV.
+- Couleur auto par type de ressource ou couleur perso, texture LSM.
+
+|cffffd700Amélioré|r — Mode test
+- Les PV et boucliers s'animent, les durées de débuffs cyclent, les stacks changent en direct,
+  les barres de ressource tickent à des vitesses différentes selon le type.
+
+|cffffd700Corrigé|r
+- Suppression des menus de format PV/ressource peu fiables (problèmes de valeurs secrètes 12.0).
+- Le texte PV/nom passe toujours au-dessus du bouclier d'absorption.
+- La poignée de déplacement flotte au-dessus des cadres pour rester saisissable.
+
+## v1.2.2
+
+- Réorganisation du panneau d'options : Estompage hors de portée dans Disposition,
+  fusion de la texture/couleur de la barre PV, fusion Aura Taille+Disposition en Icônes,
+  curseur d'opacité du panneau déplacé dans À propos > Fenêtre d'options.
+- 552 nouvelles traductions sur 8 langues (deDE/esES/itIT/ptBR/ruRU/koKR/zhCN/zhTW).
+- Les infobulles apparaissent aussi sur les sous-contrôles des sliders (steppers, curseur).
+
+## v1.2.1
+
+- Ajout du lien d'invitation Discord dans l'onglet À propos.
+
+## v1.2.0
+
+|cffffd700Nouveau|r — Bouclier d'absorption
+- Barre de bouclier translucide superposée à la barre PV (Frappe de mort, Mot de gloire, etc.).
+- Bleu ciel par défaut, entièrement personnalisable, texture LSM, côté inversable.
+
+|cffffd700Amélioré|r
+- La poignée de déplacement flotte au-dessus des cadres de tank.
+- Espacement plus serré dans l'onglet Barres (plus de chevauchement entre l'aperçu de texture et le menu côté).
+
+|cffffd700Corrigé|r
+- Suppression des formats PV Pourcent / Actuel+Pourcent — pas fiables sur les membres du groupe en 12.0.
+
+|cffffd700Empaquetage|r
+- Toutes les libs embarquées (LibStub, CallbackHandler, LibSharedMedia, LibDataBroker)
+  apparaissent dans la liste "Bibliothèques embarquées" de CurseForge avec leurs bonnes versions.
+
+## v1.1.5
+
+- Dialogue de confirmation d'écrasement à l'import traduit en 9 langues.
+
+## v1.1.4
+
+- Importer un profil dont le nom existe déjà demande désormais
+  "Le profil 'X' existe déjà. Écraser ?".
+
+## v1.1.3
+
+- Correction du portrait vert sur certaines configs (le logo s'affiche désormais correctement).
+
+## v1.1.2
+
+- logo.png inclus dans le paquet pour que l'icône portrait s'affiche depuis CurseForge.
+
+## v1.1.1
+
+- Correction d'un crash sur la boîte de dialogue de nom de profil (Nouveau / Importer).
+
+## v1.1.0
+
+|cffffd700Nouveau|r — Panneau d'options moderne
+- Refonte complète avec le template moderne de Blizzard.
+- ÉCHAP ferme le panneau.
+- Opacité ajustable, infobulles complètes sur tous les contrôles.
+- Séparateurs dorés, défilement fluide sur les pages longues.
+- Liens CurseForge et Wago.io dans À propos.
+
+## v1.0.4
+
+- Apparaît automatiquement dans Titan Panel / ChocolateBar via un launcher LibDataBroker.
+- Badge "NEW" sur les options fraîchement ajoutées (s'efface au premier survol/clic).
+- 8 nouvelles ébauches de locales (deDE/esES/itIT/ptBR/ruRU/koKR/zhCN/zhTW).
+
+## v1.0.3
+
+- Sortie sur Wago.io en complément de CurseForge.
+
+## v1.0.2
+
+- Personnalisation du fond (couleur/texture, couleur perso ou de classe, alpha).
+- Clic droit pendant le déplacement verrouille la position.
+
+## v1.0.1
+
+- Correction d'un problème critique qui pouvait empêcher de cliquer sur des objets de sac
+  quand TankWatch était chargé.
+- Le mover affiche désormais la taille réelle du contenu visible.
+
+## v1.0.0
+
+- Première version publique sur CurseForge.
+- Détection des tanks (rôle raid / /maintank / 5-man / solo).
+- Icônes de débuff lancés par les boss avec |cffffd700le compteur de stacks affiché ÉNORME au
+  centre de l'icône|r — la fonctionnalité phare.
+- Whitelist / blacklist par ID de sort (parfait pour les débuffs de trash M+).
+- Profils par perso avec export / import.
+]]
 L["Font (applies to all text)"] = "Police (s'applique à tous les textes)"
