@@ -33,7 +33,7 @@ local function iterHarmful(unit, max, callback)
         for i = 1, max do
             local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
             if not ok or not aura then break end
-            local stop = callback(aura)
+            local stop = callback(aura, i)
             if stop then break end
         end
         return "GetAuraDataByIndex"
@@ -54,7 +54,7 @@ local function iterHarmful(unit, max, callback)
                 isBossAura               = isBossDebuff and true or false,
                 isFromPlayerOrPlayerPet  = (source == "player" or source == "pet"),
             }
-            local stop = callback(aura)
+            local stop = callback(aura, i)
             if stop then break end
         end
         return "UnitAura"
@@ -68,6 +68,28 @@ end
 local function CreateAuraButton(parent, index)
     local b = CreateFrame("Frame", nil, parent)
     b:SetSize(28, 28); b:Hide()
+    -- Tooltip on hover. We store the unit + harmful index when the aura
+    -- is bound in UpdateAuras; SetUnitDebuff is secret-safe (Blizzard
+    -- handles tainted aura data internally).
+    b:EnableMouse(true)
+    b:SetScript("OnEnter", function(self)
+        if self._testMode then
+            -- In test mode there's no real aura to query; show a stub.
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(self._testName or "Test debuff", 1, 0.4, 0.4)
+            GameTooltip:AddLine("Test mode", 0.7, 0.7, 0.7)
+            GameTooltip:Show()
+            return
+        end
+        local unit = self._unit
+        local idx  = self._harmfulIndex
+        if unit and idx and GameTooltip.SetUnitDebuff then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            pcall(GameTooltip.SetUnitDebuff, GameTooltip, unit, idx)
+            GameTooltip:Show()
+        end
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local icon = b:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints(b)
@@ -215,22 +237,35 @@ local function getSpellID(aura)
     return sid
 end
 
--- DandersFrames-style boss debuff detection. C_UnitAuras.IsAuraFilteredOut-
--- ByInstanceID(unit, instId, "HARMFUL|RAID") is the secret-safe way to ask
--- Blizzard "is this aura something a raid frame would highlight?" — which
--- is what we mean by a boss debuff. Avoids reading the secret-tagged
--- `aura.isBossAura` field entirely. Returns true/false on success, nil
--- when the API isn't available (Classic / older retail).
+-- DandersFrames-style boss debuff detection. Cascades through every
+-- HARMFUL|* filter Blizzard ships, returns true on the first one the
+-- aura passes. Single "HARMFUL|RAID" is too strict — M+/dungeon
+-- debuffs are often only tagged IMPORTANT or RAID_IN_COMBAT. All checks
+-- are secret-safe (the API doesn't read the secret-tagged isBossAura).
+-- Returns nil if the API isn't available (Classic / older retail).
 local _IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+local BOSS_FILTERS = {
+    "HARMFUL|RAID",
+    "HARMFUL|RAID_IN_COMBAT",
+    "HARMFUL|IMPORTANT",
+    "HARMFUL|DISPELLABLE",
+    "HARMFUL|RAID_PLAYER_DISPELLABLE",
+}
 local function passesRaidFilter(unit, aura)
     if not _IsAuraFilteredOut or not aura then return nil end
     local instId
     pcall(function() instId = aura.auraInstanceID end)
     if isSecret(instId) or type(instId) ~= "number" then return nil end
-    local notFiltered
-    pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, "HARMFUL|RAID") end)
-    if notFiltered == nil then return nil end
-    return notFiltered == true
+    for _, f in ipairs(BOSS_FILTERS) do
+        local notFiltered
+        pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, f) end)
+        if notFiltered == true then return true end
+    end
+    -- None of the Blizzard boss-debuff filters claimed this aura.
+    -- Return nil (not false) so the caller can still try the legacy
+    -- isFromPlayerOrPlayerPet / sourceUnit cascade, which catches
+    -- hostile-cast auras Blizzard doesn't tag specifically.
+    return nil
 end
 
 local function passesFilter(unit, aura, db)
@@ -301,8 +336,8 @@ function TW.UpdateAuras(frame)
         end
     end
 
-    local found = {}
-    iterHarmful(frame._unit, maxCount * 4, function(aura)
+    local found, foundIdx = {}, {}
+    iterHarmful(frame._unit, maxCount * 4, function(aura, srcIdx)
         if passesFilter(frame._unit, aura, db) then
             -- "Only stacks > 1" filter: only applied when stacks is a
             -- non-secret regular number; otherwise we can't compare and
@@ -314,6 +349,7 @@ function TW.UpdateAuras(frame)
                 end
             end
             found[#found + 1] = aura
+            foundIdx[#foundIdx + 1] = srcIdx
             if #found >= maxCount then return true end
         end
     end)
@@ -322,6 +358,9 @@ function TW.UpdateAuras(frame)
         local b = frame._auras[i]
         local aura = found[i]
         if aura then
+            -- Tooltip plumbing: remember the unit and the original HARMFUL
+            -- index so OnEnter can call GameTooltip:SetUnitDebuff(unit, idx).
+            b._unit, b._harmfulIndex, b._testMode = frame._unit, foundIdx[i], false
             -- Icon: SetTexture accepts secret values safely (Cell pattern).
             -- Pass directly via pcall — never evaluate truthiness of a
             -- possibly-secret value (`if icon then` would taint).
@@ -338,29 +377,31 @@ function TW.UpdateAuras(frame)
             local instId
             pcall(function() instId = aura.auraInstanceID end)
 
-            -- Stacks: prefer Blizzard's secret-aware display API
-            -- (DandersFrames pattern). Returns "" below min, the count, or
-            -- "*" above max — already a display-ready string.
-            local stackTxt
-            if not isSecret(instId) and instId
-               and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
-                pcall(function()
-                    stackTxt = C_UnitAuras.GetAuraApplicationDisplayCount(
-                        frame._unit, instId, 2, 99)
-                end)
-            end
-            if isSecret(stackTxt) then
-                pcall(b.stacks.SetText, b.stacks, stackTxt)
-            elseif stackTxt ~= nil then
-                b.stacks:SetText(stackTxt)
-            else
-                local stacks = getStacks(aura)
-                if isSecret(stacks) then
-                    b.stacks:SetText("?")
-                elseif stacks == nil then
-                    b.stacks:SetText("")
-                elseif stacks > 1 then
+            -- Stacks: prefer the regular aura.applications field (non-secret
+            -- on friendly raid units, which is where TankWatch operates).
+            -- Fall back to Blizzard's secret-aware display API only if the
+            -- direct read returns secret or nil — handles edge cases where
+            -- the aura record is sealed by a hostile source.
+            local stacks = getStacks(aura)
+            if not isSecret(stacks) and type(stacks) == "number" then
+                if stacks > 1 then
                     b.stacks:SetText(tostring(stacks))
+                else
+                    b.stacks:SetText("")
+                end
+            else
+                local stackTxt
+                if not isSecret(instId) and instId
+                   and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                    pcall(function()
+                        stackTxt = C_UnitAuras.GetAuraApplicationDisplayCount(
+                            frame._unit, instId, 2, 99)
+                    end)
+                end
+                if isSecret(stackTxt) then
+                    pcall(b.stacks.SetText, b.stacks, stackTxt)
+                elseif stackTxt ~= nil and stackTxt ~= "" then
+                    b.stacks:SetText(stackTxt)
                 else
                     b.stacks:SetText("")
                 end
@@ -377,6 +418,21 @@ function TW.UpdateAuras(frame)
                and dur and exp and dur > 0 and exp > 0 then
                 b.cd:SetHideCountdownNumbers(true)
                 b.cd:SetCooldown(exp - dur, dur)
+                -- Live ticker: refresh timer text every 0.1s so the number
+                -- counts down between UNIT_AURA events. Cleared when the
+                -- button is hidden / rebound to a different aura.
+                b._exp, b._tickAcc = exp, 0
+                b:SetScript("OnUpdate", function(self, elapsed)
+                    self._tickAcc = (self._tickAcc or 0) + elapsed
+                    if self._tickAcc < 0.1 then return end
+                    self._tickAcc = 0
+                    local r = (self._exp or 0) - GetTime()
+                    if r <= 0 then
+                        self.timer:SetText("")
+                    else
+                        self.timer:SetText(formatTime(r))
+                    end
+                end)
                 b.timer:SetText(formatTime(exp - GetTime()))
             elseif not isSecret(instId) and instId
                    and C_UnitAuras and C_UnitAuras.GetAuraDuration
@@ -389,16 +445,20 @@ function TW.UpdateAuras(frame)
                     b.cd:SetHideCountdownNumbers(false)
                     b.cd:SetCooldownFromDurationObject(durObj)
                     b.timer:SetText("")
+                    b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
                 else
                     b.cd:Clear()
                     b.timer:SetText("")
+                    b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
                 end
             else
                 b.cd:Clear()
                 b.timer:SetText("")
+                b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
             end
             b:Show()
         else
+            b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
             b:Hide()
         end
     end
@@ -538,6 +598,9 @@ function TW.SetTestAuras(frame, tankIndex)
         if data and i <= (1 + (tankIndex % maxCount)) then
             b.icon:SetTexture(data[1])
             startTestLoop(b, data)
+            b._testMode = true
+            b._testName = data[5] or data[6] or ("Debuff " .. i)
+            b._unit, b._harmfulIndex = nil, nil
             b:Show()
         else
             stopTestLoop(b)
