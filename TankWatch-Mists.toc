@@ -1,4 +1,4 @@
-## Interface: 120000, 120001, 120005, 120007
+## Interface: 50500
 ## Title: TankWatch
 ## Notes: Highlight tanks with their boss-cast debuffs and stack counts.
 ## Author: Timikana

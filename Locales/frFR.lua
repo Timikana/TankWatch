@@ -191,7 +191,7 @@ L["open options"]   = "ouvrir les options"
 L["Tank visibility with boss-cast debuff stack tracking — v%s\nClick the button below to open the TankWatch configuration panel."] =
     "Visibilité des tanks avec suivi des stacks des debuffs lancés par les boss — v%s\nCliquez sur le bouton ci-dessous pour ouvrir le panneau de configuration de TankWatch."
 L["Open TankWatch options"]                  = "Ouvrir les options de TankWatch"
-L["You can also use the slash command: /tw"] = "Vous pouvez aussi utiliser la commande : /tw"
+L["You can also use the slash command: /tankw"] = "Vous pouvez aussi utiliser la commande : /tankw"
 
 -- Slash help
 L["commands:"]                  = "commandes :"
@@ -203,9 +203,9 @@ L["print roster role/maintank info"]        = "afficher le rôle et /maintank de
 L["roster diagnostic:"]                     = "diagnostic du roster :"
 L["print every HARMFUL aura on each tank unit"] = "lister tous les debuffs HARMFUL sur chaque tank"
 L["aura diagnostic:"]                       = "diagnostic des auras :"
-L["long alias for /tw"]                     = "alias long pour /tw"
-L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tw|r for options"] =
-    "|cff00ff96TankWatch|r v%s chargé — tapez |cffffff00/tw|r pour les options"
+L["long alias for /tankw"]                     = "alias long pour /tankw"
+L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"] =
+    "|cff00ff96TankWatch|r v%s chargé — tapez |cffffff00/tankw|r pour les options"
 
 -- Section headers
 L["General"]    = "Général"
@@ -440,10 +440,34 @@ L["Filter the panel: type any keyword from a label or tooltip. Sections without 
     "Filtre le panneau : tape un mot-clé d'un label ou d'une infobulle. Les sections sans correspondance sont repliées."
 L["Clear the search."] = "Effacer la recherche."
 L["No options match your search."] = "Aucune option ne correspond à ta recherche."
+L["Classic build — UI not fully tested. Report issues on GitHub / Discord."] =
+    "Build Classic — UI pas complètement testée. Remonte les bugs sur GitHub / Discord."
 L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.2
+
+|cffffd700Nouveau|r — Commande slash renommée : /tankw (alias /tankwatch)
+- /tw était trop court et risquait de coller avec d'autres addons ;
+  même convention que /bossw côté BossWatch.
+
+|cffffd700Nouveau|r — Onglets sur plusieurs rangées
+- Quand le panneau est trop étroit pour caser tous les onglets sur
+  une seule rangée, la barre wrap sur plusieurs rangées. Les rangées
+  du bas passent au-dessus de celles du haut pour pas que les bords
+  soient clippés.
+
+|cffffd700Nouveau|r — Support MoP Classic 5.5
+- TankWatch tourne maintenant sur Mists of Pandaria Classic via un .toc
+  séparé (Interface 50500). Un seul zip CurseForge sert retail et Classic.
+- C_UnitAuras n'est pas dispo sur Classic ; le scan des debuffs utilise
+  alors l'API legacy UnitAura — l'affichage des debuffs boss fonctionne
+  pareil sur les deux clients.
+- C_AddOns.GetAddOnMetadata / IsAddOnLoaded retombent sur les globales
+  legacy pour que le numéro de version et l'onglet BossWatch frère
+  fonctionnent aussi sur Classic.
+
 ## v1.4.1
 
 |cffffd700Nouveau|r — Onglets latéraux d'addon

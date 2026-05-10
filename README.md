@@ -45,13 +45,13 @@ Originally inspired by the fact that nobody really does this outside of ElvUI's 
 
 | Command | Description |
 |---|---|
-| `/tw` | Open the options panel |
-| `/tw mover` | Toggle the green-overlay drag handle |
-| `/tw test N` | Simulate N tanks (0 to 8) with fake debuffs |
-| `/tw reset` | Wipe all settings and reload the UI |
-| `/tw debug` | Print roster role / maintank info |
-| `/tw auradebug` | Print every HARMFUL aura on each tank unit |
-| `/tankwatch` | Long alias for `/tw` |
+| `/tankw` | Open the options panel |
+| `/tankw mover` | Toggle the green-overlay drag handle |
+| `/tankw test N` | Simulate N tanks (0 to 8) with fake debuffs |
+| `/tankw reset` | Wipe all settings and reload the UI |
+| `/tankw debug` | Print roster role / maintank info |
+| `/tankw auradebug` | Print every HARMFUL aura on each tank unit |
+| `/tankwatch` | Long alias for `/tankw` |
 
 ## Bundled libraries
 

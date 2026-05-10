@@ -198,5 +198,5 @@
   icon center** — the headline feature
 - Whitelist / blacklist by spell ID (great for M+ trash debuffs)
 - Per-character profiles with base64 export / import
-- Minimap button, slash commands (`/tw`, `/tankwatch`)
+- Minimap button, slash commands (`/tankw`, `/tankwatch`)
 - French translation included

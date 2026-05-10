@@ -21,16 +21,45 @@ end
 
 -- HARMFUL aura iteration. We skip AuraUtil.ForEachAura entirely because in
 -- 12.0 it throws on raid units and the C-side error appears to leak taint
--- past pcall. C_UnitAuras.GetAuraDataByIndex is the safe path.
+-- past pcall. C_UnitAuras.GetAuraDataByIndex is the safe path on retail.
+-- On MoP Classic 5.5 (where C_UnitAuras doesn't exist) we fall back to
+-- the legacy positional UnitAura(unit, i, "HARMFUL"), synthesizing an
+-- aura table compatible with the rest of the code (passesFilter,
+-- getStacks, the icon/timer paths). Secret-value paths are no-ops on
+-- Classic since secrets are a 12.0 concept — `isSecret` returns false
+-- when issecretvalue isn't defined.
 local function iterHarmful(unit, max, callback)
-    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
-    for i = 1, max do
-        local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
-        if not ok or not aura then break end
-        local stop = callback(aura)
-        if stop then break end
+    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        for i = 1, max do
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+            if not ok or not aura then break end
+            local stop = callback(aura)
+            if stop then break end
+        end
+        return "GetAuraDataByIndex"
+    elseif _G.UnitAura then
+        for i = 1, max do
+            local name, icon, count, _, duration, expirationTime,
+                  source, _, _, spellId, _, isBossDebuff =
+                _G.UnitAura(unit, i, "HARMFUL")
+            if not name then break end
+            local aura = {
+                name                     = name,
+                icon                     = icon,
+                applications             = count or 0,
+                duration                 = duration,
+                expirationTime           = expirationTime,
+                sourceUnit               = source,
+                spellId                  = spellId,
+                isBossAura               = isBossDebuff and true or false,
+                isFromPlayerOrPlayerPet  = (source == "player" or source == "pet"),
+            }
+            local stop = callback(aura)
+            if stop then break end
+        end
+        return "UnitAura"
     end
-    return "GetAuraDataByIndex"
+    return nil
 end
 
 -- ============================================================
