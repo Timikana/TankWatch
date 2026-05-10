@@ -20,7 +20,7 @@ TW.Defaults = {
 
     -- Container
     anchor = "LEFT", anchorX = 50, anchorY = 0,
-    frameWidth = 200, frameHeight = 36, frameSpacing = 4, frameScale = 1.0,
+    frameWidth = 150, frameHeight = 36, frameSpacing = 4, frameScale = 1.0,
     growDirection = "DOWN",
 
     -- Bars
@@ -70,7 +70,7 @@ TW.Defaults = {
 
     -- Auras (boss-cast debuffs with stacks emphasis)
     showAuras = true, aurasMaxCount = 5, aurasSize = 28, aurasSpacing = 2,
-    aurasAnchor = "RIGHT", aurasX = 6, aurasY = 0, aurasGrowX = "RIGHT",
+    aurasAnchor = "RIGHT", aurasX = 0, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
     auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
@@ -375,6 +375,8 @@ end
 --   It preserves position, scale, fonts, filters, whitelist/blacklist.
 -- ============================================================
 TW.PRESETS = {
+    -- Presets only override visibility/mode flags. Size, position, fonts,
+    -- colors, filters all stay as the user configured them in the source profile.
     FULL = {
         showHealthBar  = true,
         showHealthText = true,
@@ -384,8 +386,6 @@ TW.PRESETS = {
         showAuras      = true,
         compactMode    = false,
         showClassIcon  = false,
-        frameWidth     = 200,
-        frameHeight    = 36,
     },
     COMPACT_AURAS = {
         showHealthBar  = false,
@@ -397,8 +397,6 @@ TW.PRESETS = {
         compactMode    = true,
         showClassIcon  = true,
         classIconSize  = 28,
-        frameWidth     = 200,
-        frameHeight    = 32,
     },
     AURAS_ONLY = {
         showHealthBar  = false,
@@ -409,8 +407,6 @@ TW.PRESETS = {
         showAuras      = true,
         compactMode    = true,
         showClassIcon  = false,
-        frameWidth     = 200,
-        frameHeight    = 32,
     },
 }
 

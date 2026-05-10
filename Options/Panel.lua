@@ -612,6 +612,15 @@ local function buildLayoutPage(page)
     }, 14, y, 220), "v1.x_visibilityMode"),
         L["When TankWatch frames are visible: only in raid, in any group, or always."])
 
+    -- Detection mode dropdown (sits next to the visibility scope — both
+    -- answer "what tanks does TankWatch show me?")
+    addTooltip(makeDropdown(page, L["Detection mode"], "tankDetection", {
+        { text = L["Group role (auto-set from spec)"], value = "ROLE" },
+        { text = L["Only /maintank (raid)"],           value = "MAINTANK" },
+        { text = L["Either role or /maintank"],        value = "BOTH" },
+    }, 14, y - 56, 260),
+        L["How TankWatch decides who counts as a tank in your group."])
+
     -- Compact mode toggle + sub-option (also reachable via Profiles > Presets).
     -- The class-icon checkbox is auto-enabled/disabled based on compactMode.
     local cbCompact = makeCheck(page, L["Compact mode (debuffs only)"], "compactMode", 280, y)
@@ -640,7 +649,8 @@ local function buildLayoutPage(page)
     syncClassIconEnable()
 
     -- ============ POSITION ============
-    y = y - 60
+    -- Extra -56 to leave room for the Detection mode dropdown placed at y - 56
+    y = y - 60 - 56
     makeSection(page, L["Position"], 14, y); y = y - 24
 
     addTooltip(makeDropdown(page, L["Anchor"], "anchor", ANCHOR9(), 14, y),
@@ -1085,16 +1095,8 @@ end
 local function buildFiltersPage(page)
     local y = -8
 
-    -- ============ TANK DETECTION ============
+    -- ============ TANK DETECTION (mode dropdown moved to Layout > General) ============
     makeSection(page, L["Tank detection"], 14, y); y = y - 24
-
-    addTooltip(markAsNew(makeDropdown(page, L["Detection mode"], "tankDetection", {
-        { text = L["Group role (auto-set from spec)"], value = "ROLE" },
-        { text = L["Only /maintank (raid)"],           value = "MAINTANK" },
-        { text = L["Either role or /maintank"],        value = "BOTH" },
-    }, 14, y, 260), "v1.x_tankDetection"),
-        L["How TankWatch decides who counts as a tank in your group."])
-    y = y - 56
 
     addTooltip(makeCheck(page, L["Always include me if my spec is tank"], "forceIncludeSelf", 14, y),
         L["Add yourself to the tank list when your active spec role is TANK, even if the raid leader didn't /maintank you."])
@@ -1367,16 +1369,15 @@ local function buildProfilesPage(page)
     addTooltip(btnImport, L["Decode the export string and create a new profile from it."])
 
     -- ============ PRESETS ============
-    -- Applying a preset creates a NEW profile (clone of current + preset
-    -- overrides) and switches to it. Original profile is preserved.
-    local presetY = -340
+    -- Anchored relative to the import button so it always sits below it,
+    -- regardless of how the import section grows.
     local presetHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    presetHeader:SetPoint("TOPLEFT", 14, presetY)
+    presetHeader:SetPoint("TOPLEFT", btnImport, "BOTTOMLEFT", 0, -28)
     presetHeader:SetText(L["Presets"])
     presetHeader:SetTextColor(1, 0.82, 0)
 
     local presetLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    presetLabel:SetPoint("TOPLEFT", 14, presetY - 22)
+    presetLabel:SetPoint("TOPLEFT", presetHeader, "BOTTOMLEFT", 0, -8)
     presetLabel:SetText(L["Apply preset (creates a new profile, original preserved)"])
 
     local presetDD = CreateFrame("DropdownButton", "TWOpt_DD_preset", page, "WowStyle1DropdownTemplate")
