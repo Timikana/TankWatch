@@ -1784,6 +1784,14 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.5
+
+|cffffd700Fixed|r — Off-screen frame on lower resolutions
+- If the saved container position lands entirely outside the viewport
+  (e.g. dragged on a 4K screen, now playing on 1080p), the frame is
+  auto-repositioned to the default LEFT 50,0 on next layout pass with
+  a chat notice.
+
 ## v1.4.4
 
 |cffffd700New|r — Tooltips on debuff icons
