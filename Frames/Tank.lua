@@ -445,6 +445,27 @@ local function ApplyLayout()
     container:ClearAllPoints()
     container:SetPoint(anchor, UIParent, anchor, db.anchorX or 0, db.anchorY or 0)
 
+    -- Off-screen rescue: if the saved position lands the container entirely
+    -- outside the screen (e.g. the user dragged it on a wider resolution
+    -- and is now on a smaller one), force-reset to the default anchor on
+    -- the next frame once GetLeft/Right have resolved.
+    C_Timer.After(0, function()
+        if not container.GetLeft then return end
+        local l, r = container:GetLeft(),   container:GetRight()
+        local bt, t = container:GetBottom(), container:GetTop()
+        local pw, ph = UIParent:GetWidth(), UIParent:GetHeight()
+        if not (l and r and bt and t and pw and ph) then return end
+        local off = (r < 0) or (l > pw) or (t < 0) or (bt > ph)
+        if off then
+            db.anchor, db.anchorX, db.anchorY = "LEFT", 50, 0
+            container:ClearAllPoints()
+            container:SetPoint("LEFT", UIParent, "LEFT", 50, 0)
+            print("|cff00ff96TankWatch:|r " ..
+                (TW.L["frame was off-screen — repositioned to LEFT 50,0"]
+                 or "frame was off-screen — repositioned to LEFT 50,0"))
+        end
+    end)
+
     -- Resize the container to match the actual visible content so that the
     -- mover overlay (which uses :SetAllPoints(container)) covers exactly
     -- the tank frames and not extra empty space below.

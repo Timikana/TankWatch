@@ -442,10 +442,41 @@ L["Clear the search."] = "Effacer la recherche."
 L["No options match your search."] = "Aucune option ne correspond à ta recherche."
 L["Classic build — UI not fully tested. Report issues on GitHub / Discord."] =
     "Build Classic — UI pas complètement testée. Remonte les bugs sur GitHub / Discord."
+L["frame was off-screen — repositioned to LEFT 50,0"] =
+    "frame hors écran — repositionné à GAUCHE 50,0"
 L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.5
+
+|cffffd700Corrigé|r — Frame hors écran sur petites résolutions
+- Si la position sauvée du conteneur tombe entièrement en dehors
+  du viewport (ex : dragué sur un écran 4K, joué ensuite en 1080p),
+  le frame est auto-repositionné au défaut GAUCHE 50,0 avec une
+  notice dans le chat.
+
+## v1.4.4
+
+|cffffd700Nouveau|r — Infobulles sur les icônes de debuff
+- Survole un debuff pour voir l'infobulle Blizzard standard avec
+  la description complète (secret-safe via SetUnitDebuff).
+- Le mode test affiche un stub d'infobulle pour prévisualiser.
+
+|cffffd700Amélioré|r — Couverture des debuffs de boss
+- Le filtre "Lancés par un boss uniquement" passe par tous les
+  filtres Blizzard HARMFUL (RAID, RAID_IN_COMBAT, IMPORTANT,
+  DISPELLABLE, RAID_PLAYER_DISPELLABLE). Les debuffs M+/donjon
+  taggés IMPORTANT mais pas RAID s'affichent désormais.
+
+|cffffd700Corrigé|r — Stacks à nouveau visibles
+- Lecture directe de aura.applications en premier, fallback sur
+  l'API d'affichage si secret/nil.
+
+|cffffd700Amélioré|r — Timer en live
+- Le texte du compteur se rafraîchit toutes les 100ms entre les
+  événements UNIT_AURA, plus de texte figé.
+
 ## v1.4.3
 
 |cffffd700Corrigé|r — Les debuffs de boss ne manquent plus sur retail
