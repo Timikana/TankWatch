@@ -203,6 +203,7 @@ L["reset all settings + reload"] = "réinitialiser et recharger l'UI"
 L["print roster role/maintank info"]        = "afficher le rôle et /maintank de chaque membre"
 L["roster diagnostic:"]                     = "diagnostic du roster :"
 L["print every HARMFUL aura on each tank unit"] = "lister tous les debuffs HARMFUL sur chaque tank"
+L["copy system + addon state for bug reports"] = "copier l'état système + addon pour un rapport de bug"
 L["aura diagnostic:"]                       = "diagnostic des auras :"
 L["long alias for /tankw"]                     = "alias long pour /tankw"
 L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"] =
@@ -451,6 +452,25 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.9
+
+|cffffd700Nouveau|r — Indicateur de mort
+- Quand un tank meurt, le frame s'estompe à 45% et un overlay
+  tête de mort apparaît au centre — visible instantanément sans
+  avoir à lire les PV à 0.
+
+|cffffd700Nouveau|r — Helper rapport de bug
+- /tankw bugreport ouvre une popup pré-remplie avec tout ce qu'un
+  triage attend : version, client (retail/Classic), build, taille
+  d'écran, profil actif + modes, compteurs whitelist/blacklist,
+  tanks visibles, et la dernière erreur Lua si BugGrabber est
+  installé. Ctrl+A → Ctrl+C → coller sur Discord ou GitHub.
+
+|cffffd700Amélioré|r — Ticker global d'auras
+- Remplacé les OnUpdate par icône (jusqu'à 40 sur 8 tanks × 5 auras)
+  par un seul ticker partagé à 10 Hz qui parcourt les icônes visibles.
+  Moins de CPU, même rendu.
+
 ## v1.4.8
 
 |cffffd700Corrigé|r — Police des auras en combat

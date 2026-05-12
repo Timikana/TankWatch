@@ -1784,6 +1784,25 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.9
+
+|cffffd700New|r — Death indicator
+- When a tank dies, the frame dims to 45% and a skull overlay
+  appears at the center so it's instantly obvious without having
+  to read 0/X HP.
+
+|cffffd700New|r — Bug report helper
+- /tankw bugreport opens a popup pre-filled with everything triage
+  needs: version, client (retail/Classic), build, screen size, active
+  profile + modes, whitelist/blacklist counts, visible tanks, and
+  the last Lua error if BugGrabber is installed. Ctrl+A → Ctrl+C →
+  paste into Discord or GitHub.
+
+|cffffd700Improved|r — Single global aura ticker
+- Replaced the per-icon OnUpdate handlers (up to 40 of them at a
+  full 8 tanks × 5 auras) with one shared 10 Hz ticker that walks
+  every visible icon. Lower CPU at zero visual cost.
+
 ## v1.4.8
 
 |cffffd700Fixed|r — Aura font in combat
@@ -2133,6 +2152,7 @@ local function buildAboutPage(page)
         "|cffffff00/tankw reset|r — " .. L["reset all settings + reload"] .. "\n" ..
         "|cffffff00/tankw debug|r — " .. L["print roster role/maintank info"] .. "\n" ..
         "|cffffff00/tankw auradebug|r — " .. L["print every HARMFUL aura on each tank unit"] .. "\n" ..
+        "|cffffff00/tankw bugreport|r — " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports") .. "\n" ..
         "|cffffff00/tankwatch|r — " .. L["long alias for /tankw"]
     )
 

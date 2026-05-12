@@ -425,21 +425,12 @@ function TW.UpdateAuras(frame)
                and dur and exp and dur > 0 and exp > 0 then
                 b.cd:SetHideCountdownNumbers(true)
                 b.cd:SetCooldown(exp - dur, dur)
-                -- Live ticker: refresh timer text every 0.1s so the number
-                -- counts down between UNIT_AURA events. Cleared when the
-                -- button is hidden / rebound to a different aura.
-                b._exp, b._tickAcc = exp, 0
-                b:SetScript("OnUpdate", function(self, elapsed)
-                    self._tickAcc = (self._tickAcc or 0) + elapsed
-                    if self._tickAcc < 0.1 then return end
-                    self._tickAcc = 0
-                    local r = (self._exp or 0) - GetTime()
-                    if r <= 0 then
-                        self.timer:SetText("")
-                    else
-                        self.timer:SetText(formatTime(r))
-                    end
-                end)
+                -- Live countdown: just tag the button with _exp; a single
+                -- global ticker (registered once at file load) walks every
+                -- visible button at 10 Hz and refreshes the text. Replaces
+                -- the previous per-button OnUpdate (40+ tickers for a full
+                -- raid of 8 tanks × 5 auras).
+                b._exp = exp
                 b.timer:SetText(formatTime(exp - GetTime()))
             elseif not isSecret(instId) and instId
                    and C_UnitAuras and C_UnitAuras.GetAuraDuration
@@ -452,20 +443,20 @@ function TW.UpdateAuras(frame)
                     b.cd:SetHideCountdownNumbers(false)
                     b.cd:SetCooldownFromDurationObject(durObj)
                     b.timer:SetText("")
-                    b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
+                    b._exp = nil
                 else
                     b.cd:Clear()
                     b.timer:SetText("")
-                    b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
+                    b._exp = nil
                 end
             else
                 b.cd:Clear()
                 b.timer:SetText("")
-                b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
+                b._exp = nil
             end
             b:Show()
         else
-            b:SetScript("OnUpdate", nil); b._exp, b._tickAcc = nil, nil
+            b._exp = nil
             b:Hide()
         end
     end
@@ -614,4 +605,36 @@ function TW.SetTestAuras(frame, tankIndex)
             b:Hide()
         end
     end
+end
+
+-- ============================================================
+-- GLOBAL TIMER TICKER
+-- One OnUpdate (instead of one per aura icon) refreshes every visible
+-- timer's countdown text at 10 Hz. Buttons opt in by setting `b._exp`
+-- on bind; cleared on hide / rebind. Test-mode buttons keep their own
+-- OnUpdate (they do more than just count down — they cycle durations
+-- and animate stacks).
+-- ============================================================
+do
+    local tickerFrame = CreateFrame("Frame", nil, UIParent)
+    local acc = 0
+    tickerFrame:SetScript("OnUpdate", function(_, elapsed)
+        acc = acc + elapsed
+        if acc < 0.1 then return end
+        acc = 0
+        local now = GetTime()
+        if not TW.TankFrames then return end
+        for i = 1, (TW.MAX_TANKS or 8) do
+            local f = TW.TankFrames[i]
+            if f and f:IsShown() and f._auras then
+                for _, b in ipairs(f._auras) do
+                    if b._exp and b:IsShown() then
+                        local r = b._exp - now
+                        if r <= 0 then b.timer:SetText("")
+                        else            b.timer:SetText(formatTime(r)) end
+                    end
+                end
+            end
+        end
+    end)
 end

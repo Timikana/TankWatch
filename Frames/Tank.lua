@@ -402,6 +402,15 @@ local function CreateTankFrame(index)
     classIcon:Hide()
     f.classIcon = classIcon
 
+    -- Death overlay: skull icon centered on the frame + dim. Hidden by
+    -- default, shown by UpdateFrame when the tank is dead/ghost.
+    local deadOverlay = f:CreateTexture(nil, "OVERLAY", nil, 7)
+    deadOverlay:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_8") -- skull
+    deadOverlay:SetSize(24, 24)
+    deadOverlay:SetPoint("CENTER", f, "CENTER", 0, 0)
+    deadOverlay:Hide()
+    f.deadOverlay = deadOverlay
+
     return f
 end
 
@@ -606,6 +615,19 @@ local function UpdateFrame(f)
     if not f or not f._unit then return end
     local db = TW:GetDB()
     local unit = f._unit
+
+    -- Death state: dim the frame + show a skull overlay so it's obvious
+    -- the tank is down. Checked before anything else so the rest of the
+    -- update still runs (HP bar to 0, etc.) but the visual cue dominates.
+    local isDead
+    pcall(function() isDead = UnitIsDeadOrGhost(unit) end)
+    if isDead == true then
+        f:SetAlpha(0.45)
+        if f.deadOverlay then f.deadOverlay:Show() end
+    else
+        if not f._testMode then f:SetAlpha(1) end
+        if f.deadOverlay then f.deadOverlay:Hide() end
+    end
 
     -- Compact mode forces name/text/bars hidden regardless of individual toggles
     local compact = db.compactMode and true or false
@@ -1208,6 +1230,10 @@ ev:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
 ev:RegisterEvent("UNIT_POWER_FREQUENT")
 ev:RegisterEvent("UNIT_MAXPOWER")
 ev:RegisterEvent("UNIT_DISPLAYPOWER")
+ev:RegisterEvent("PLAYER_DEAD")
+ev:RegisterEvent("PLAYER_UNGHOST")
+ev:RegisterEvent("PLAYER_ALIVE")
+ev:RegisterEvent("UNIT_FLAGS")
 ev:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
@@ -1216,7 +1242,7 @@ ev:SetScript("OnEvent", function(self, event, unit)
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         TW:RefreshTanks()
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
-        or event == "UNIT_ABSORB_AMOUNT_CHANGED"
+        or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_FLAGS"
         or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
@@ -1228,6 +1254,13 @@ ev:SetScript("OnEvent", function(self, event, unit)
                 end
                 if match then UpdateFrame(f) end
             end
+        end
+    elseif event == "PLAYER_DEAD" or event == "PLAYER_UNGHOST" or event == "PLAYER_ALIVE" then
+        -- Player-only events have no unit arg; refresh every frame that
+        -- resolves to "player" (typically frame[1] in solo mode).
+        for i = 1, MAX_TANKS do
+            local f = TW.TankFrames[i]
+            if f and f._unit then UpdateFrame(f) end
         end
     end
 end)

@@ -524,6 +524,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintRosterDebug then TW:PrintRosterDebug() end
     elseif cmd == "auradebug" or cmd == "auras" then
         if TW.PrintAuraDebug then TW:PrintAuraDebug() end
+    elseif cmd == "bugreport" or cmd == "report" then
+        if TW.ShowBugReport then TW:ShowBugReport() end
     else
         local L = TW.L
         print("|cff00ff96TankWatch:|r " .. L["commands:"])
@@ -533,7 +535,117 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw reset      - " .. L["reset all settings + reload"])
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
+        print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end
+end
+
+-- ============================================================
+-- BUG REPORT HELPER
+-- /tankw bugreport pops a small read-only EditBox prefilled with
+-- everything a Discord triage needs (versions, client, profile, DB
+-- counts, last Lua error). User does Ctrl+A → Ctrl+C → paste.
+-- ============================================================
+local _bugReportFrame
+function TW:ShowBugReport()
+    local lines = {}
+    local function add(k, v) lines[#lines + 1] = string.format("**%s:** %s", k, tostring(v)) end
+
+    local version = (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Version")) or "?"
+    local interface = (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Interface")) or "?"
+    local clientName = "Retail"
+    if WOW_PROJECT_ID and WOW_PROJECT_ID ~= (WOW_PROJECT_MAINLINE or 1) then
+        clientName = "Classic (project " .. tostring(WOW_PROJECT_ID) .. ")"
+    end
+    local locale = GetLocale and GetLocale() or "?"
+    local screenW, screenH = GetPhysicalScreenSize and GetPhysicalScreenSize()
+    if not screenW then screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight() end
+
+    add("TankWatch", "v" .. version .. " (Interface " .. interface .. ")")
+    add("Client", clientName .. ", locale " .. locale)
+    add("Build", (GetBuildInfo and select(1, GetBuildInfo())) or "?")
+    add("Screen", string.format("%dx%d", screenW or 0, screenH or 0))
+
+    local db = TW:GetDB()
+    add("Active profile", TW:GetActiveProfileName())
+    add("Visibility mode", db.visibilityMode or "?")
+    add("Tank detection", db.tankDetection or "?")
+    add("Aura filter mode", db.auraFilterMode or "?")
+    add("Compact mode", db.compactMode and "on" or "off")
+    add("Show power bar", db.showPowerBar and "on" or "off")
+    add("Show absorb", db.showAbsorbBar and "on" or "off")
+    local function countTable(t) local n = 0; if type(t) == "table" then for _ in pairs(t) do n = n + 1 end end; return n end
+    add("Whitelist entries", countTable(db.auraWhitelist))
+    add("Blacklist entries", countTable(db.auraBlacklist))
+    add("Force-include names", countTable(db.forceIncludeNames))
+
+    -- Visible tanks
+    local tanks = {}
+    if TW.TankFrames then
+        for i = 1, (TW.MAX_TANKS or 8) do
+            local f = TW.TankFrames[i]
+            if f and (f._unit or f._testMode) then
+                tanks[#tanks + 1] = (f._testMode and "TEST:" or "") .. tostring(f._unit or "test"..i)
+            end
+        end
+    end
+    add("Visible tanks", #tanks > 0 and table.concat(tanks, ", ") or "(none)")
+
+    -- Last Lua error if BugGrabber is loaded
+    if BugGrabber and BugGrabber.GetDB then
+        local errs = BugGrabber:GetDB()
+        if errs and #errs > 0 then
+            local last = errs[#errs]
+            add("Last error", (last.message or "?"):sub(1, 200))
+        end
+    end
+
+    local body = table.concat(lines, "\n")
+
+    if not _bugReportFrame then
+        local f = CreateFrame("Frame", "TankWatchBugReportFrame", UIParent, "BackdropTemplate")
+        f:SetSize(560, 380)
+        f:SetPoint("CENTER")
+        f:SetFrameStrata("DIALOG")
+        f:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        f:EnableMouse(true); f:SetMovable(true); f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        tinsert(UISpecialFrames, "TankWatchBugReportFrame")
+
+        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOP", 0, -16)
+        title:SetText("|cff00ff96TankWatch|r — Bug report")
+
+        local hint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hint:SetPoint("TOP", title, "BOTTOM", 0, -6)
+        hint:SetText("Ctrl+A → Ctrl+C → paste in Discord / GitHub")
+
+        local scroll = CreateFrame("ScrollFrame", "TankWatchBugReportScroll", f, "InputScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 14, -56)
+        scroll:SetPoint("BOTTOMRIGHT", -32, 44)
+        scroll.CharCount:Hide()
+        scroll.EditBox:SetMaxLetters(0)
+        scroll.EditBox:SetAutoFocus(false)
+        scroll.EditBox:SetFontObject("ChatFontNormal")
+        f.editBox = scroll.EditBox
+
+        local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        close:SetSize(100, 22)
+        close:SetPoint("BOTTOM", 0, 14)
+        close:SetText(CLOSE or "Close")
+        close:SetScript("OnClick", function() f:Hide() end)
+        _bugReportFrame = f
+    end
+
+    _bugReportFrame.editBox:SetText(body)
+    _bugReportFrame.editBox:HighlightText()
+    _bugReportFrame.editBox:SetFocus()
+    _bugReportFrame:Show()
 end
 
 -- ============================================================
