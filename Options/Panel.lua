@@ -1784,6 +1784,18 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.6
+
+|cffffd700New|r — SplitWatch added to the sister-tab switcher
+- A SplitWatch side tab now appears on the left edge alongside the
+  BossWatch tab when SplitWatch is installed — one click swaps to its
+  options panel at the same position.
+
+|cffffd700Improved|r — Changelog moved into About tab
+- One less tab in the strip: the changelog now lives as a collapsible
+  section at the bottom of the About tab (SplitWatch convention).
+- Same content, folds away by default to keep the meta info compact.
+
 ## v1.4.5
 
 |cffffd700Fixed|r — Off-screen frame on lower resolutions
@@ -1809,9 +1821,8 @@ local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
 
 |cffffd700Fixed|r — Boss debuffs no longer missing on retail
 - The "Boss-cast only" filter now uses Blizzard's secret-safe RAID
-  filter (same approach as DandersFrames) — picks up encounter
-  debuffs that were filtered out before because their `isBossAura`
-  field was secret-tagged.
+  filter — picks up encounter debuffs that were filtered out before
+  because their `isBossAura` field was secret-tagged.
 - Class icon in compact mode now reads the English class token from
   UnitClass (was reading the localized name → CLASS_ICON_COORDS lookup
   failed → whole texture sheet was visible).
@@ -1821,7 +1832,7 @@ local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
 
 |cffffd700New|r — Slash command renamed: /tankw (with /tankwatch alias)
 - /tw was too short and risked colliding with other addons; same
-  convention as BossWatch's /bossw.
+  convention as BossWatch's /bossw and SplitWatch's /splitw.
 
 |cffffd700New|r — Multi-row tab strip
 - When the panel is too narrow to fit every tab in one row, the strip
@@ -1835,14 +1846,16 @@ local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
   to the legacy UnitAura API — boss-cast debuff display works the same
   on both clients.
 - C_AddOns.GetAddOnMetadata / IsAddOnLoaded fall back to the legacy
-  globals so the version label and the BossWatch sister-tab work too.
+  globals so the version label and the BossWatch/SplitWatch sister
+  tabs work too.
 
 ## v1.4.1
 
 |cffffd700New|r — Sister-addon side tabs
 - Discreet tabs on the left edge of the options panel let you switch
-  between TankWatch and BossWatch with one click.
-- The second tab only appears when the sister addon is also installed.
+  between TankWatch and its watch-family sister addons (BossWatch,
+  SplitWatch) with one click.
+- A sister tab only appears when its addon is also installed.
 - Modern style: dark glass backdrop, gold accent stripe on the active
   addon, glow on hover.
 
@@ -1995,74 +2008,6 @@ local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
 - Per-character profiles with export / import.
 ]]
 
-local function buildChangelogPage(page)
-    _currentSection = nil  -- raw content, no sections
-
-    -- Parse the embedded markdown source into entries:
-    --   ## vX.Y.Z  → new entry (version header, large gold)
-    --   - …        → bullet line
-    --   |cffffd700…|r heading lines (Nouveau / Amélioré) keep their color
-    local entries = {}
-    local cur
-    for raw in (CHANGELOG_TEXT .. "\n"):gmatch("([^\n]*)\n") do
-        local v = raw:match("^##%s*(.+)$")
-        if v then
-            cur = { ver = v, lines = {} }
-            entries[#entries + 1] = cur
-        elseif cur then
-            local bullet = raw:match("^%-%s+(.+)$")
-            if bullet then
-                cur.lines[#cur.lines + 1] = { kind = "bullet", text = bullet }
-            elseif raw:match("^%s*$") then
-                -- skip blanks
-            elseif raw:match("^%s%s") then
-                -- continuation line of previous bullet (markdown-style indent)
-                local last = cur.lines[#cur.lines]
-                if last then last.text = last.text .. " " .. raw:gsub("^%s+", "") end
-            else
-                cur.lines[#cur.lines + 1] = { kind = "subhead", text = raw }
-            end
-        end
-    end
-
-    local y = -10
-    for _, entry in ipairs(entries) do
-        local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        title:SetPoint("TOPLEFT", 14, y)
-        title:SetText("|cffeda14a" .. entry.ver .. "|r")
-        y = y - 24
-
-        for _, line in ipairs(entry.lines) do
-            local fs
-            if line.kind == "subhead" then
-                fs = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                fs:SetPoint("TOPLEFT", 18, y)
-                fs:SetWidth(660)
-                fs:SetJustifyH("LEFT")
-                fs:SetSpacing(2)
-                fs:SetText(line.text)
-                local rows = math.max(1, math.ceil(#line.text / 100))
-                y = y - (rows * 16 + 4)
-            else
-                fs = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                fs:SetPoint("TOPLEFT", 28, y)
-                fs:SetWidth(640)
-                fs:SetJustifyH("LEFT")
-                fs:SetSpacing(2)
-                fs:SetText("• " .. line.text)
-                local rows = math.max(1, math.ceil(#line.text / 95))
-                y = y - (rows * 16 + 4)
-            end
-        end
-        y = y - 14
-    end
-
-    local hint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", 14, y - 6)
-    hint:SetText(L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"]
-        or "Full GitHub history: https://github.com/Timikana/TankWatch/releases")
-end
-
 local function buildAboutPage(page)
     local meta = TW.GetAddOnMetadata
     local version = (meta and meta(addonName, "Version")) or "?"
@@ -2177,6 +2122,75 @@ local function buildAboutPage(page)
     local hint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 14, 12)
     hint:SetText(L["Click a URL to select it, then Ctrl+C to copy."])
+
+    -- ----------------------------------------------------------------
+    -- Changelog section, chained at the bottom (SplitWatch convention:
+    -- About + Changelog live in the same tab). Anchored well below the
+    -- slash-commands list (which ends ~y=-660 with 9 lines).
+    -- ----------------------------------------------------------------
+    makeSection(page, L["Changelog"], 14, -680)
+    local entries = {}
+    local cur
+    for raw in (CHANGELOG_TEXT .. "\n"):gmatch("([^\n]*)\n") do
+        local v = raw:match("^##%s*(.+)$")
+        if v then
+            cur = { ver = v, lines = {} }
+            entries[#entries + 1] = cur
+        elseif cur then
+            local bullet = raw:match("^%-%s+(.+)$")
+            if bullet then
+                cur.lines[#cur.lines + 1] = { kind = "bullet", text = bullet }
+            elseif raw:match("^%s*$") then
+                -- skip blanks
+            elseif raw:match("^%s%s") then
+                local last = cur.lines[#cur.lines]
+                if last then last.text = last.text .. " " .. raw:gsub("^%s+", "") end
+            else
+                cur.lines[#cur.lines + 1] = { kind = "subhead", text = raw }
+            end
+        end
+    end
+
+    local y = -710
+    for _, entry in ipairs(entries) do
+        local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", 14, y)
+        title:SetText("|cffeda14a" .. entry.ver .. "|r")
+        _registerInSection(title)
+        y = y - 24
+
+        for _, line in ipairs(entry.lines) do
+            local fs
+            if line.kind == "subhead" then
+                fs = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                fs:SetPoint("TOPLEFT", 18, y)
+                fs:SetWidth(660)
+                fs:SetJustifyH("LEFT")
+                fs:SetSpacing(2)
+                fs:SetText(line.text)
+                _registerInSection(fs)
+                local rows = math.max(1, math.ceil(#line.text / 100))
+                y = y - (rows * 16 + 4)
+            else
+                fs = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                fs:SetPoint("TOPLEFT", 28, y)
+                fs:SetWidth(640)
+                fs:SetJustifyH("LEFT")
+                fs:SetSpacing(2)
+                fs:SetText("• " .. line.text)
+                _registerInSection(fs)
+                local rows = math.max(1, math.ceil(#line.text / 95))
+                y = y - (rows * 16 + 4)
+            end
+        end
+        y = y - 14
+    end
+
+    local ghHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    ghHint:SetPoint("TOPLEFT", 14, y - 6)
+    ghHint:SetText(L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"]
+        or "Full GitHub history: https://github.com/Timikana/TankWatch/releases")
+    _registerInSection(ghHint)
 end
 
 -- ============================================================
@@ -2304,7 +2318,6 @@ local function build()
     pages.filters  = buildPage("filters",  buildFiltersPage)
     pages.profiles = buildPage("profiles", buildProfilesPage)
     pages.about    = buildPage("about",    buildAboutPage)
-    pages.changelog= buildPage("changelog", buildChangelogPage)
     _currentSection = nil
 
     -- ========================================================
@@ -2455,7 +2468,6 @@ local function build()
         { id = "filters",  label = L["Filters"] },
         { id = "profiles", label = L["Profiles"] },
         { id = "about",    label = L["About"] },
-        { id = "changelog",label = L["Changelog"] or "Changelog" },
     }
     local tabBtns = {}
     local _savedScroll = {}     -- scroll offset memorized per tab
@@ -2702,6 +2714,26 @@ local function build()
                   BW:ShowOptionsAt(point, relPoint, x, y)
               elseif BW and BW.ToggleOptions then
                   BW:ToggleOptions()
+              end
+          end },
+        { id = "SplitWatch", isSelf = false, icon = "Interface\\AddOns\\SplitWatch\\Media\\logo.png",
+          tooltip = L["Open SplitWatch options"] or "Open SplitWatch options",
+          loadedCheck = function()
+              local SW = _G.SplitWatch
+              return TW.IsAddOnLoaded and TW.IsAddOnLoaded("SplitWatch")
+                     and SW and SW.ToggleOptions
+          end,
+          onClick = function()
+              local point, _, relPoint, x, y
+              if panel and panel:IsShown() then
+                  point, _, relPoint, x, y = panel:GetPoint(1)
+                  panel:Hide()
+              end
+              local SW = _G.SplitWatch
+              if SW and SW.ShowOptionsAt and point then
+                  SW:ShowOptionsAt(point, relPoint, x, y)
+              elseif SW and SW.ToggleOptions then
+                  SW:ToggleOptions()
               end
           end },
     }
