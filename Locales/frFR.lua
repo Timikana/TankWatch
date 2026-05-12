@@ -445,10 +445,22 @@ L["Classic build — UI not fully tested. Report issues on GitHub / Discord."] =
     "Build Classic — UI pas complètement testée. Remonte les bugs sur GitHub / Discord."
 L["frame was off-screen — repositioned to LEFT 50,0"] =
     "frame hors écran — repositionné à GAUCHE 50,0"
+L["options panel was off-screen — recentered"] =
+    "panneau d'options hors écran — recentré"
 L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.7
+
+|cffffd700Corrigé|r — Rescue hors écran du panneau d'options
+- La fenêtre d'options bénéficie maintenant de la même protection que
+  le conteneur des tanks : si la taille/position sauvée tombe entièrement
+  en dehors du viewport (sauvée sur écran 4K, jouée ensuite en 1080p),
+  recentrage auto au défaut 720×620 avec une notice dans le chat.
+- La taille restaurée est aussi clampée à l'écran pour que le panneau
+  ne soit jamais plus grand que le moniteur.
+
 ## v1.4.6
 
 |cffffd700Nouveau|r — SplitWatch ajouté au switcher d'onglets frères
