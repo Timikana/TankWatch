@@ -1784,6 +1784,16 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.7
+
+|cffffd700Fixed|r — Options panel off-screen rescue
+- The options window itself now gets the same protection as the tank
+  container: if the saved size/position lands the panel entirely
+  outside the viewport (saved on a 4K screen, then playing on 1080p),
+  it auto-recenters at the default 720×620 with a chat notice.
+- Restored size is also clamped to the screen so the panel never ends
+  up bigger than the monitor.
+
 ## v1.4.6
 
 |cffffd700New|r — SplitWatch added to the sister-tab switcher
@@ -2226,16 +2236,45 @@ local function build()
     panel:Hide()
     panel:SetClampedToScreen(true)
 
-    -- Restore saved size + position (account-wide)
+    -- Restore saved size + position (account-wide). Clamp the size to the
+    -- current screen so a window saved on a larger monitor doesn't end up
+    -- bigger than the viewport. Off-screen rescue happens on first Show.
     TankWatchDB = TankWatchDB or {}
     if TankWatchDB.panelSize and TankWatchDB.panelSize.w and TankWatchDB.panelSize.h then
-        panel:SetSize(TankWatchDB.panelSize.w, TankWatchDB.panelSize.h)
+        local pw, ph = UIParent:GetWidth(), UIParent:GetHeight()
+        local sw = math.min(TankWatchDB.panelSize.w, math.max(720, pw - 40))
+        local sh = math.min(TankWatchDB.panelSize.h, math.max(500, ph - 40))
+        panel:SetSize(sw, sh)
     end
     if TankWatchDB.panelPos and TankWatchDB.panelPos.x and TankWatchDB.panelPos.y then
         panel:ClearAllPoints()
         panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
             TankWatchDB.panelPos.x, TankWatchDB.panelPos.y)
     end
+
+    -- Off-screen rescue: when the panel is shown, if it lands entirely
+    -- outside the viewport (saved on a larger resolution, now on a
+    -- smaller one), reset to centered + default size.
+    panel:HookScript("OnShow", function(self)
+        C_Timer.After(0, function()
+            if not self.GetLeft then return end
+            local l, r  = self:GetLeft(),   self:GetRight()
+            local bt, t = self:GetBottom(), self:GetTop()
+            local pw, ph = UIParent:GetWidth(), UIParent:GetHeight()
+            if not (l and r and bt and t and pw and ph) then return end
+            local off = (r < 20) or (l > pw - 20) or (t < 20) or (bt > ph - 20)
+            if off then
+                TankWatchDB.panelPos  = nil
+                TankWatchDB.panelSize = nil
+                self:ClearAllPoints()
+                self:SetSize(720, 620)
+                self:SetPoint("CENTER")
+                print("|cff00ff96TankWatch:|r " ..
+                    (L["options panel was off-screen — recentered"]
+                     or "options panel was off-screen — recentered"))
+            end
+        end)
+    end)
 
     -- Close on ESC
     tinsert(UISpecialFrames, "TankWatchOptions")
