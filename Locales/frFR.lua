@@ -451,6 +451,14 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.8
+
+|cffffd700Corrigé|r — Police des auras en combat
+- Les nouvelles icônes de debuff créées en plein combat gardaient
+  la police Blizzard par défaut au lieu de celle configurée dans
+  Texte > Police. La police configurée est maintenant ré-appliquée
+  à chaque agrandissement du pool d'icônes.
+
 ## v1.4.7
 
 |cffffd700Corrigé|r — Rescue hors écran du panneau d'options

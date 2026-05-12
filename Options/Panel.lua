@@ -1784,6 +1784,13 @@ end
 -- string. Versions in gold, bullets in white. Scrollable.
 -- ============================================================
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.8
+
+|cffffd700Fixed|r — Aura font in combat
+- New debuff icons created mid-combat were keeping the default
+  Blizzard font instead of the one configured in Text > Font. The
+  configured font is now re-applied whenever the icon pool grows.
+
 ## v1.4.7
 
 |cffffd700Fixed|r — Options panel off-screen rescue
