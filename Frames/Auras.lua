@@ -137,12 +137,19 @@ end
 
 local function ensurePool(frame, count)
     frame._auras = frame._auras or {}
+    local created = false
     for i = 1, count do
         if not frame._auras[i] then
             frame._auras[i] = CreateAuraButton(frame, i)
+            created = true
         end
     end
     for i = count + 1, #frame._auras do frame._auras[i]:Hide() end
+    -- Newly created buttons start with the default NumberFontNormalHuge /
+    -- NumberFontNormal — re-apply the configured font so they match the
+    -- existing ones. Happens on first combat when the pool grows past
+    -- whatever ApplyFonts saw at PLAYER_LOGIN.
+    if created and TW.ApplyFonts then TW:ApplyFonts() end
 end
 
 local function formatTime(s)
