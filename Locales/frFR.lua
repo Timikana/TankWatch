@@ -81,7 +81,8 @@ L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash d
 
 -- Window
 L["TankWatch — Options"] = "TankWatch — Options"
-L["Open BossWatch options"] = "Ouvrir les options BossWatch"
+L["Open BossWatch options"]  = "Ouvrir les options BossWatch"
+L["Open SplitWatch options"] = "Ouvrir les options SplitWatch"
 
 -- Layout
 L["Unlock / Lock Mover"] = "Déverrouiller / Verrouiller"
@@ -448,6 +449,18 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.6
+
+|cffffd700Nouveau|r — SplitWatch ajouté au switcher d'onglets frères
+- Un onglet latéral SplitWatch apparaît à gauche à côté de l'onglet
+  BossWatch quand SplitWatch est installé — un clic bascule vers son
+  panneau d'options à la même position.
+
+|cffffd700Amélioré|r — Changelog déplacé dans l'onglet À propos
+- Un onglet de moins dans la barre : le changelog vit maintenant en
+  section repliable au bas de l'onglet À propos (convention SplitWatch).
+- Même contenu, replié par défaut pour garder les méta-infos compactes.
+
 ## v1.4.5
 
 |cffffd700Corrigé|r — Frame hors écran sur petites résolutions
@@ -494,7 +507,7 @@ L["CHANGELOG_BODY"] = [[
 
 |cffffd700Nouveau|r — Commande slash renommée : /tankw (alias /tankwatch)
 - /tw était trop court et risquait de coller avec d'autres addons ;
-  même convention que /bossw côté BossWatch.
+  même convention que /bossw (BossWatch) et /splitw (SplitWatch).
 
 |cffffd700Nouveau|r — Onglets sur plusieurs rangées
 - Quand le panneau est trop étroit pour caser tous les onglets sur
@@ -509,15 +522,16 @@ L["CHANGELOG_BODY"] = [[
   alors l'API legacy UnitAura — l'affichage des debuffs boss fonctionne
   pareil sur les deux clients.
 - C_AddOns.GetAddOnMetadata / IsAddOnLoaded retombent sur les globales
-  legacy pour que le numéro de version et l'onglet BossWatch frère
-  fonctionnent aussi sur Classic.
+  legacy pour que le numéro de version et les onglets latéraux des
+  addons frères (BossWatch, SplitWatch) fonctionnent aussi sur Classic.
 
 ## v1.4.1
 
 |cffffd700Nouveau|r — Onglets latéraux d'addon
 - Onglets discrets sur le bord gauche du panneau pour basculer entre
-  TankWatch et BossWatch en un clic.
-- Le second onglet n'apparaît que si l'addon frère est installé aussi.
+  TankWatch et ses addons frères de la famille watch (BossWatch,
+  SplitWatch) en un clic.
+- Un onglet frère n'apparaît que si l'addon est installé aussi.
 - Style moderne : fond verre sombre, liseré doré sur l'addon actif,
   halo au survol.
 
