@@ -11,6 +11,11 @@ TW.OptPages = TW.OptPages or {}
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
 ## v1.4.9
 
+|cffffd700Fixed|r — Test mode "Off" restores real tanks
+- Turning test mode off was hiding every frame without rebinding to
+  the real roster; frames stayed hidden until the next roster event.
+  Test off now refreshes the tank list immediately.
+
 |cffffd700New|r — Death indicator
 - When a tank dies, the frame dims to 45% and a skull overlay
   appears at the center so it's instantly obvious without having

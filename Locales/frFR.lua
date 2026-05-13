@@ -454,6 +454,11 @@ L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
 L["CHANGELOG_BODY"] = [[
 ## v1.4.9
 
+|cffffd700Corrigé|r — Le mode test "Off" rétablit les vrais tanks
+- Désactiver le mode test masquait les frames sans rebinder le roster ;
+  les frames restaient cachées jusqu'au prochain événement de groupe.
+  Test off rafraîchit maintenant la liste des tanks immédiatement.
+
 |cffffd700Nouveau|r — Indicateur de mort
 - Quand un tank meurt, le frame s'estompe à 45% et un overlay
   tête de mort apparaît au centre — visible instantanément sans
