@@ -1116,6 +1116,11 @@ function TW:SetTestMode(count)
     ApplyLayout()
     if TW.ApplyFonts then TW:ApplyFonts() end
 
+    -- Turning test mode OFF (count == 0): rebind real tank units. Without
+    -- this, every frame stays hidden with _unit = nil — the user sees no
+    -- frames at all until the next roster event.
+    if count == 0 and TW.RefreshTanks then TW:RefreshTanks() end
+
     -- Spawn / refresh the test ticker (every frame; smooth interpolation)
     if not TW._testTicker then
         TW._testTicker = CreateFrame("Frame")
