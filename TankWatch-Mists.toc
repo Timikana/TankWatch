@@ -2,7 +2,7 @@
 ## Title: TankWatch
 ## Notes: Highlight tanks with their boss-cast debuffs and stack counts.
 ## Author: Timikana
-## Version: 1.4.9-beta2
+## Version: 1.4.9
 ## IconTexture: Interface\AddOns\TankWatch\Media\icon
 ## SavedVariables: TankWatchDB
 ## X-Curse-Project-ID: 1536671
@@ -39,6 +39,7 @@ Options\Widgets.lua
 Options\Pages\Bars.lua
 Options\Pages\Text.lua
 Options\Pages\Auras.lua
+Options\Pages\Raid.lua
 Options\Pages\Layout.lua
 Options\Pages\About.lua
 Options\Pages\Filters.lua

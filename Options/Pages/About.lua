@@ -11,6 +11,22 @@ TW.OptPages = TW.OptPages or {}
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
 ## v1.4.9
 
+|cffffd700New|r — Right-click + raid markers on tank frames
+- Right-click a tank frame to open the Blizzard unit menu (Set Focus,
+  Set Raid Target submenu, etc.).
+- Shift+LeftClick cycles the raid marker on that tank.
+- Ctrl+LeftClick sets focus directly.
+- The raid marker overlay shows on each tank frame when a marker is
+  set. New dedicated "Raid Marker" tab to tweak anchor / offset / size
+  / alpha; toggles in Layout > General gate click actions and the
+  overlay separately.
+
+|cffffd700Fixed|r — Raid marker icon now displays on real tanks
+- In Midnight 12.0 GetRaidTargetIndex returns a "secret value" even
+  for friendly units, so the overlay never appeared in real groups
+  (only test mode worked). Now routed through the texture
+  :SetSpriteSheetCell method that accepts secret indices C-side.
+
 |cffffd700Fixed|r — Test mode "Off" restores real tanks
 - Turning test mode off was hiding every frame without rebinding to
   the real roster; frames stayed hidden until the next roster event.

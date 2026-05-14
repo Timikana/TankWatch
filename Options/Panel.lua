@@ -541,6 +541,7 @@ local function build()
     pages.bars     = buildPage("bars",     TW.OptPages.buildBars)
     pages.text     = buildPage("text",     TW.OptPages.buildText)
     pages.auras    = buildPage("auras",    TW.OptPages.buildAuras)
+    pages.raid     = buildPage("raid",     TW.OptPages.buildRaid)
     pages.filters  = buildPage("filters",  TW.OptPages.buildFilters)
     pages.profiles = buildPage("profiles", TW.OptPages.buildProfiles)
     pages.about    = buildPage("about",    TW.OptPages.buildAbout)
@@ -690,6 +691,7 @@ local function build()
         { id = "layout",   label = L["Layout"] },
         { id = "bars",     label = L["Bars"] },
         { id = "text",     label = L["Text"] },
+        { id = "raid",     label = L["Raid Marker"] },
         { id = "auras",    label = L["Auras"] },
         { id = "filters",  label = L["Filters"] },
         { id = "profiles", label = L["Profiles"] },

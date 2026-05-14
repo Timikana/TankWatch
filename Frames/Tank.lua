@@ -57,8 +57,11 @@ end
 
 
 
--- Forward declaration (defined further down) so EnsureCreated can call it.
+-- Forward declarations (defined further down). Needed when an earlier
+-- function (e.g. ApplyLayout) references one of these — without this,
+-- the name resolves as a global at compile time → nil at runtime.
 local startRangeTicker
+local updateRaidTargetIcon
 
 -- ============================================================
 -- TANK DETECTION
@@ -329,8 +332,33 @@ end
 local function CreateTankFrame(index)
     local f = CreateFrame("Button", "TankWatchFrame" .. index, UIParent, "SecureUnitButtonTemplate,BackdropTemplate")
     f:SetSize(200, 36)
-    f:SetAttribute("type1", "target")
-    f:SetAttribute("type2", "focus")
+    -- Click actions (BW pattern):
+    --   LeftClick           → target
+    --   RightClick          → Blizzard unit menu (contains Set Focus + Raid Target submenu)
+    --   Shift+LeftClick     → cycle raid target marker (1..8..0)
+    --   Ctrl+LeftClick      → set focus
+    -- All gated behind db.clickActions (default true). Modifiers re-applied
+    -- on roster refresh because SetAttribute is combat-locked.
+    f:SetAttribute("*type1", "target")
+    f:SetAttribute("*type2", "togglemenu")
+    f:RegisterForClicks("AnyDown")
+    f.applyClickActions = function()
+        if InCombatLockdown() then return false end
+        local db = TW:GetDB()
+        local unit = f._unit or ("raid" .. index)
+        if db.clickActions ~= false then
+            f:SetAttribute("shift-type1", "macro")
+            f:SetAttribute("shift-macrotext1",
+                ("/run local i=GetRaidTargetIndex('%s') or 0; if i>=8 then i=0 end; SetRaidTarget('%s', i+1)"):format(unit, unit))
+            f:SetAttribute("ctrl-type1", "focus")
+        else
+            f:SetAttribute("shift-type1", nil)
+            f:SetAttribute("shift-macrotext1", nil)
+            f:SetAttribute("ctrl-type1", nil)
+        end
+        return true
+    end
+    f.applyClickActions()
     f:Hide()
     f._index = index
 
@@ -401,6 +429,24 @@ local function CreateTankFrame(index)
     classIcon:SetTexture(CLASS_ICON_TEX)
     classIcon:Hide()
     f.classIcon = classIcon
+
+    -- Raid target marker icon — hosted on a dedicated child Frame whose
+    -- FrameLevel sits ABOVE every other child Frame (healthBar, powerBar,
+    -- absorbBar, aura buttons). A texture parented to `f` alone would be
+    -- buried under those child Frames, regardless of OVERLAY sublevel,
+    -- because child Frames draw above the parent's layers. BW skirts this
+    -- by parenting the texture to healthBar, but TW's compact mode hides
+    -- the healthBar — so a separate always-shown host is the clean fix.
+    local rtHost = CreateFrame("Frame", nil, f)
+    rtHost:SetAllPoints(f)
+    rtHost:SetFrameLevel((f:GetFrameLevel() or 1) + 50)
+    f.raidTargetHost = rtHost
+    local rt = rtHost:CreateTexture(nil, "OVERLAY", nil, 7)
+    rt:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+    rt:SetSize(24, 24)
+    rt:SetPoint("CENTER", rtHost, "CENTER", 0, 0)
+    rt:Hide()
+    f.raidTargetIcon = rt
 
     -- Death overlay: skull icon centered on the frame + dim. Hidden by
     -- default, shown by UpdateFrame when the tank is dead/ghost.
@@ -604,9 +650,96 @@ local function ApplyLayout()
         end
 
         if TW.LayoutAuras then TW.LayoutAuras(f, db) end
+        if f._unit or f._testMode then updateRaidTargetIcon(f) end
     end
 end
 TW.ApplyLayout = ApplyLayout
+
+-- Refresh the raid target icon on a single frame. Called from UpdateFrame
+-- and from the RAID_TARGET_UPDATE event handler. Secret-safe: friendly
+-- raid tokens return a regular number; for safety we still pcall both the
+-- GetRaidTargetIndex call and the SetRaidTargetIconTexCoord (Blizzard C
+-- function handles secret numbers internally).
+-- Hardcoded texcoord table for the 8 raid markers on the standard
+-- Interface\TargetingFrame\UI-RaidTargetingIcons sheet (4x4 atlas,
+-- 8 used cells). Fallback when SetRaidTargetIconTexCoord is missing
+-- or fails silently.
+local RAID_ICON_COORDS = {
+    [1] = {0.00, 0.25, 0.00, 0.25},  -- Star
+    [2] = {0.25, 0.50, 0.00, 0.25},  -- Circle
+    [3] = {0.50, 0.75, 0.00, 0.25},  -- Diamond
+    [4] = {0.75, 1.00, 0.00, 0.25},  -- Triangle
+    [5] = {0.00, 0.25, 0.25, 0.50},  -- Moon
+    [6] = {0.25, 0.50, 0.25, 0.50},  -- Square
+    [7] = {0.50, 0.75, 0.25, 0.50},  -- Cross
+    [8] = {0.75, 1.00, 0.25, 0.50},  -- Skull
+}
+
+function updateRaidTargetIcon(f)  -- forward-declared local at top of file
+    if not f or not f.raidTargetIcon then return end
+    local db = TW:GetDB()
+    if db.showRaidTargetIcon == false then f.raidTargetIcon:Hide(); return end
+    -- Re-apply size + anchor every time so the configurable settings take
+    -- effect without needing a /reload.
+    local sz = db.raidTargetIconSize or 24
+    local anchor = db.raidTargetIconAnchor or "CENTER"
+    f.raidTargetIcon:SetSize(sz, sz)
+    f.raidTargetIcon:ClearAllPoints()
+    -- Anchor relative to the HOST frame (which mirrors f:SetAllPoints), so
+    -- offsets are interpreted the same way as if anchored to f directly.
+    local host = f.raidTargetHost or f
+    f.raidTargetIcon:SetPoint(anchor, host, anchor,
+        db.raidTargetIconX or 0, db.raidTargetIconY or 0)
+    f.raidTargetIcon:SetAlpha(db.raidTargetIconAlpha or 0.9)
+    f.raidTargetIcon:SetVertexColor(1, 1, 1, 1)
+    local tex = f.raidTargetIcon
+
+    -- Test mode: idx is a known Lua number, use the hardcoded texcoord path.
+    if f._testMode then
+        local idx = ((f._index or 1) - 1) % 8 + 1
+        local c = RAID_ICON_COORDS[idx]
+        if c then
+            tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+            tex:SetTexCoord(c[1], c[2], c[3], c[4])
+            tex:Show()
+        else
+            tex:Hide()
+        end
+        return
+    end
+
+    -- Real mode: in Midnight 12.0 GetRaidTargetIndex returns a SECRET value
+    -- (even for friendly units — confirmed via the "place la cible ??? sur X"
+    -- chat where ??? is the secret marker name). DandersFrames pattern:
+    --   1. Capture via pcall (the local gets the secret-tagged value)
+    --   2. If issecretvalue → use the TEXTURE METHOD :SetSpriteSheetCell
+    --      (accepts secret indices C-side, unlike the SetRaidTargetIconTexture global)
+    --   3. Else if a regular number → use the global SetRaidTargetIconTexture
+    --   4. Else → hide
+    if not f._unit then tex:Hide(); return end
+    local index
+    pcall(function() index = GetRaidTargetIndex(f._unit) end)
+
+    local issecret = _G.issecretvalue
+    local canaccess = _G.canaccessvalue
+
+    if issecret and issecret(index) then
+        tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+        pcall(function() tex:SetSpriteSheetCell(index, 4, 4, 64, 64) end)
+        tex:Show()
+    elseif index and (not canaccess or canaccess(index)) and index ~= 0 then
+        tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+        if SetRaidTargetIconTexture then
+            pcall(SetRaidTargetIconTexture, tex, index)
+        else
+            local c = RAID_ICON_COORDS[index]
+            if c then tex:SetTexCoord(c[1], c[2], c[3], c[4]) end
+        end
+        tex:Show()
+    else
+        tex:Hide()
+    end
+end
 
 -- ============================================================
 -- UPDATE
@@ -615,6 +748,10 @@ local function UpdateFrame(f)
     if not f or not f._unit then return end
     local db = TW:GetDB()
     local unit = f._unit
+
+    -- Raid target marker (small Blizzard icon top-left of the frame)
+    f._showRaidTargetIcon = db.showRaidTargetIcon ~= false
+    updateRaidTargetIcon(f)
 
     -- Death state: dim the frame + show a skull overlay so it's obvious
     -- the tank is down. Checked before anything else so the rest of the
@@ -858,6 +995,10 @@ function TW:RefreshTanks()
         if unit and not f._testMode then
             f._unit = unit
             f:SetAttribute("unit", unit)
+            -- Re-stamp the modifier-click macros with the new unit token.
+            -- Safe out of combat; gracefully no-ops in combat (the OOC
+            -- handler below re-runs them via _pendingLayout flush).
+            if f.applyClickActions then f.applyClickActions() end
             f:Show()
             UpdateFrame(f)
         elseif not f._testMode then
@@ -996,6 +1137,17 @@ local function applyTestFrameSettings(f, idx)
 
     local compact = db.compactMode and true or false
 
+    -- Raid target marker (one per test frame, cycling 1..8 by index)
+    if f.raidTargetIcon then
+        if db.showRaidTargetIcon ~= false and SetRaidTargetIconTexCoord then
+            local marker = ((idx - 1) % 8) + 1
+            local ok = pcall(SetRaidTargetIconTexCoord, f.raidTargetIcon, marker)
+            if ok then f.raidTargetIcon:Show() else f.raidTargetIcon:Hide() end
+        else
+            f.raidTargetIcon:Hide()
+        end
+    end
+
     -- Class icon for test mode (uses TEST_CLASSES)
     if f.classIcon then
         if compact and db.showClassIcon then
@@ -1071,6 +1223,10 @@ local function applyTestFrameSettings(f, idx)
     end
 
     if TW.SetTestAuras then TW.SetTestAuras(f, idx) end
+
+    -- Fake raid marker preview in test mode (cycle 1..8 across frames).
+    f._showRaidTargetIcon = db.showRaidTargetIcon ~= false
+    updateRaidTargetIcon(f)
 end
 TW._applyTestFrameSettings = applyTestFrameSettings
 
@@ -1239,6 +1395,7 @@ ev:RegisterEvent("PLAYER_DEAD")
 ev:RegisterEvent("PLAYER_UNGHOST")
 ev:RegisterEvent("PLAYER_ALIVE")
 ev:RegisterEvent("UNIT_FLAGS")
+ev:RegisterEvent("RAID_TARGET_UPDATE")
 ev:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
@@ -1246,6 +1403,13 @@ ev:SetScript("OnEvent", function(self, event, unit)
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         TW:RefreshTanks()
+    elseif event == "RAID_TARGET_UPDATE" then
+        -- RAID_TARGET_UPDATE has no unit arg; refresh every visible frame's marker
+        TW._rtRealPrinted = nil -- reset debug so we print on each event
+        for i = 1, MAX_TANKS do
+            local f = TW.TankFrames[i]
+            if f and f._unit then updateRaidTargetIcon(f) end
+        end
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
         or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_FLAGS"
         or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then

@@ -114,6 +114,21 @@ TW.Defaults = {
     forceIncludeSelf  = false,
     forceIncludeNames = {}, -- [normalizedName] = true → always treat them as a tank
 
+    -- Click actions on tank frames. When true (default):
+    --   LeftClick       → target
+    --   RightClick      → Blizzard unit menu (Set Focus + Raid Target submenu)
+    --   Shift+LeftClick → cycle raid target marker (1..8..0)
+    --   Ctrl+LeftClick  → set focus
+    clickActions = true,
+
+    -- Raid target marker overlay on the tank frame (the 8 Blizzard icons).
+    showRaidTargetIcon   = true,
+    raidTargetIconSize   = 24,
+    raidTargetIconAnchor = "TOP",
+    raidTargetIconX      = 0,
+    raidTargetIconY      = 5,
+    raidTargetIconAlpha  = 0.9,
+
     -- Font
     fontFace = "Friz Quadrata TT", fontSize = 12, fontOutline = "OUTLINE",
 }

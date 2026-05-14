@@ -101,6 +101,11 @@ function TW.OptPages.buildLayout(page)
 
     y = y - 32
 
+    addTooltip(markAsNew(makeCheck(page, L["Click actions (Shift = mark, Ctrl = focus)"], "clickActions", 14, y), "v1.4.9_clickActions"),
+        L["When enabled: Shift+LeftClick cycles the raid target marker on the tank; Ctrl+LeftClick sets your focus. RightClick always opens the Blizzard unit menu (Set Focus, Set Raid Target submenu, etc.)."])
+
+    y = y - 32
+
     -- Visibility scope dropdown
     addTooltip(markAsNew(makeDropdown(page, L["Show in"], "visibilityMode", {
         { text = L["Raid only"],           value = "RAID" },
