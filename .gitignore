@@ -30,3 +30,18 @@ WTF/
 
 # Logs
 *.log
+
+# Google Drive sync artifacts
+.tmp.driveupload/
+.tmp.drivedownload/
+*.gdoc
+*.gsheet
+*.gslides
+*.gdraw
+*.gform
+*.gmap
+*.gsite
+*.gtable
+*.gnote
+*.gjam
+*.gscript
