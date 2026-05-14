@@ -36,6 +36,25 @@ L["Import as new profile..."]                    = "Importer comme nouveau profi
 
 -- Minimap button
 L["Show minimap button"] = "Bouton minimap"
+L["Click actions (Shift = mark, Ctrl = focus)"] = "Actions de clic (Maj = marquer, Ctrl = focaliser)"
+L["When enabled: Shift+LeftClick cycles the raid target marker on the tank; Ctrl+LeftClick sets your focus. RightClick always opens the Blizzard unit menu (Set Focus, Set Raid Target submenu, etc.)."] =
+    "Quand activé : Maj+clic gauche cycle l'icône de raid sur le tank ; Ctrl+clic gauche définit le focus. Clic droit ouvre toujours le menu unité Blizzard (Focaliser, Marqueurs de raid en sous-menu, etc.)."
+L["Show raid target icon"] = "Afficher l'icône de raid"
+L["Display the raid marker (star / circle / diamond / etc.) overlay on the top-left corner of the tank frame when a marker is set."] =
+    "Affiche le marqueur de raid (étoile / cercle / diamant / etc.) en haut à gauche du cadre du tank quand un marqueur est posé."
+L["Raid Marker"]              = "Marqueur"
+L["Raid Target Icon"]         = "Marqueur de raid"
+L["Show Raid Target Icon"]    = "Afficher l'icône de marqueur de raid"
+L["Display the raid target icon (if any) over each tank frame."] =
+    "Affiche l'icône de marqueur de raid (si présente) sur chaque cadre de tank."
+L["Position the raid target icon (star, circle, diamond, triangle, moon, square, cross, skull) on each tank frame."] =
+    "Positionne l'icône de marqueur de raid (étoile, cercle, diamant, triangle, lune, carré, croix, tête de mort) sur chaque cadre de tank."
+L["Anchor point of the raid icon on the frame."] = "Point d'ancrage de l'icône sur le cadre."
+L["Horizontal offset of the raid icon."]         = "Décalage horizontal de l'icône."
+L["Vertical offset of the raid icon."]           = "Décalage vertical de l'icône."
+L["Size of the raid icon in pixels."]            = "Taille de l'icône en pixels."
+L["Opacity of the raid icon."]                   = "Opacité de l'icône."
+L["Alpha"]                                       = "Alpha"
 L["Left-click: options"] = "Clic gauche : options"
 L["Right-click: mover"]  = "Clic droit : mover"
 L["Drag: reposition"]    = "Glisser : repositionner"
@@ -203,6 +222,7 @@ L["reset all settings + reload"] = "réinitialiser et recharger l'UI"
 L["print roster role/maintank info"]        = "afficher le rôle et /maintank de chaque membre"
 L["roster diagnostic:"]                     = "diagnostic du roster :"
 L["print every HARMFUL aura on each tank unit"] = "lister tous les debuffs HARMFUL sur chaque tank"
+L["copy system + addon state for bug reports"] = "copier l'état système + addon pour un rapport de bug"
 L["aura diagnostic:"]                       = "diagnostic des auras :"
 L["long alias for /tankw"]                     = "alias long pour /tankw"
 L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"] =
@@ -451,6 +471,47 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.9
+
+|cffffd700Nouveau|r — Clic droit + marqueurs de raid sur les cadres
+- Clic droit sur un cadre ouvre le menu unité Blizzard (Focaliser,
+  sous-menu Marqueurs de raid, etc.).
+- Maj+clic gauche cycle le marqueur de raid sur le tank.
+- Ctrl+clic gauche définit le focus directement.
+- L'icône de marqueur s'affiche sur chaque cadre quand un marqueur
+  est posé. Nouvel onglet dédié "Marqueur" pour régler l'ancrage /
+  décalage / taille / alpha ; les actions de clic et l'overlay se
+  togglent séparément dans Disposition > Général.
+
+|cffffd700Corrigé|r — L'icône de marqueur s'affiche sur les vrais tanks
+- En Midnight 12.0, GetRaidTargetIndex renvoie une "valeur secrète"
+  même pour les unités amies, donc l'overlay ne s'affichait jamais
+  en groupe réel (seul le mode test fonctionnait). Le rendu passe
+  maintenant par la méthode texture :SetSpriteSheetCell qui accepte
+  les indices secrets côté C.
+
+|cffffd700Corrigé|r — Le mode test "Off" rétablit les vrais tanks
+- Désactiver le mode test masquait les frames sans rebinder le roster ;
+  les frames restaient cachées jusqu'au prochain événement de groupe.
+  Test off rafraîchit maintenant la liste des tanks immédiatement.
+
+|cffffd700Nouveau|r — Indicateur de mort
+- Quand un tank meurt, le frame s'estompe à 45% et un overlay
+  tête de mort apparaît au centre — visible instantanément sans
+  avoir à lire les PV à 0.
+
+|cffffd700Nouveau|r — Helper rapport de bug
+- /tankw bugreport ouvre une popup pré-remplie avec tout ce qu'un
+  triage attend : version, client (retail/Classic), build, taille
+  d'écran, profil actif + modes, compteurs whitelist/blacklist,
+  tanks visibles, et la dernière erreur Lua si BugGrabber est
+  installé. Ctrl+A → Ctrl+C → coller sur Discord ou GitHub.
+
+|cffffd700Amélioré|r — Ticker global d'auras
+- Remplacé les OnUpdate par icône (jusqu'à 40 sur 8 tanks × 5 auras)
+  par un seul ticker partagé à 10 Hz qui parcourt les icônes visibles.
+  Moins de CPU, même rendu.
+
 ## v1.4.8
 
 |cffffd700Corrigé|r — Police des auras en combat
