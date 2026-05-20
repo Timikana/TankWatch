@@ -83,6 +83,18 @@ TW.Defaults = {
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
     auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
     showSpellIDInTooltip = true, -- append spellID line to debuff tooltips
+
+    -- Private auras (Midnight 12.0): boss debuffs that don't appear via
+    -- GetAuraSlots / UNIT_AURA payload — rendered natively by Blizzard
+    -- through a frame anchor we register. See Frames/PrivateAuras.lua.
+    showPrivateAuras     = true,
+    privateAuraCount     = 4,
+    privateAuraSize      = 28,
+    privateAuraSpacing   = 2,
+    privateAuraAnchor    = "LEFT",   -- LEFT | RIGHT
+    privateAuraGrowX     = "RIGHT",  -- direction icons stack
+    privateAuraX         = 0,
+    privateAuraY         = -32,      -- below the regular debuff row
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
     -- Default blacklist: well-known junk debuffs that match Blizzard's
     -- HARMFUL|RAID filter but aren't actually boss debuffs. User can

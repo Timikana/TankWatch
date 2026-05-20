@@ -1008,6 +1008,10 @@ function TW:RefreshTanks()
         end
     end
     ApplyLayout()
+    -- Re-bind the private aura anchors for the new unit set. C_UnitAuras
+    -- private auras (Midnight 12.0+) render boss debuffs that don't show
+    -- up via GetAuraSlots — without these anchors we miss them.
+    if TW.ApplyAllPrivateAuras then TW:ApplyAllPrivateAuras() end
 end
 
 -- ============================================================
@@ -1400,6 +1404,10 @@ ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
         TW:RefreshTanks()
+        -- Flush any private-aura anchor registrations that were deferred
+        -- because we couldn't call C_UnitAuras.AddPrivateAuraAnchor mid-
+        -- combat (Blizzard rejects the API during combat lockdown).
+        if TW.FlushPendingPrivateAuras then TW:FlushPendingPrivateAuras() end
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         -- Wipe the per-unit aura cache so stale entries from removed
