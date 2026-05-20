@@ -35,15 +35,22 @@ end
 -- appear under those specialized slots, never under plain "HARMFUL" —
 -- so we scan each filter, dedupe by auraInstanceID, and emit each
 -- unique aura once via the callback.
-local SCAN_FILTERS = {
-    "HARMFUL",
+-- BOSS mode: only the specialized "RAID-relevant" filter strings. Each
+-- aura returned by ForEachAura under one of these filters is already
+-- classified by Blizzard as a boss debuff / raid-important aura — no
+-- post-filtering needed. Excludes plain "HARMFUL" so self-cast debuffs
+-- like Sated / Temporal Displacement / Exhaustion don't leak in.
+-- ALL mode: plain HARMFUL.
+local SCAN_FILTERS_BOSS = {
     "HARMFUL|RAID",
     "HARMFUL|RAID_IN_COMBAT",
     "HARMFUL|IMPORTANT",
     "HARMFUL|DISPELLABLE",
     "HARMFUL|RAID_PLAYER_DISPELLABLE",
 }
-local function iterHarmful(unit, max, callback)
+local SCAN_FILTERS_ALL = { "HARMFUL" }
+local function iterHarmful(unit, max, callback, mode)
+    local SCAN_FILTERS = (mode == "ALL") and SCAN_FILTERS_ALL or SCAN_FILTERS_BOSS
     if _G.AuraUtil and AuraUtil.ForEachAura then
         local seen, emitted, stopAll = {}, 0, false
         for _, filter in ipairs(SCAN_FILTERS) do
@@ -334,46 +341,22 @@ local function passesFilter(unit, aura, db)
     if not aura then return false end
     local sid = getSpellID(aura)
 
-    -- Blacklist / whitelist only apply when spellId is a regular value
+    -- Blacklist always wins; whitelist forces show even when iteration
+    -- mode would filter the aura out.
     if sid then
         if db.auraBlacklist and db.auraBlacklist[sid] then return false end
         if db.auraWhitelist and db.auraWhitelist[sid] then return true  end
     end
 
     local mode = db.auraFilterMode or "ALL"
-    if mode == "ALL"       then return true  end
     if mode == "WHITELIST" then return false end
-
-    -- BOSS mode: prefer Blizzard's own RAID filter (secret-safe).
-    local raidPass = passesRaidFilter(unit, aura)
-    if raidPass ~= nil then return raidPass end
-    -- BOSS mode: in 12.0 `isBossAura` is secret-tagged on auras whose
-    -- source is a hostile unit (the field gets sealed along with the
-    -- caster record). `isFromPlayerOrPlayerPet` is usually a regular
-    -- value but can also come back nil for some auras with no clear
-    -- attribution. Cascade through three checks, defaulting to "show"
-    -- when nothing tells us it came from us — better than missing real
-    -- boss debuffs.
-    local fromMe
-    pcall(function() fromMe = aura.isFromPlayerOrPlayerPet end)
-    if not isSecret(fromMe) and fromMe ~= nil then
-        return fromMe == false
-    end
-    -- isFromPlayerOrPlayerPet not available — try isBossAura
-    local isBoss
-    pcall(function() isBoss = aura.isBossAura end)
-    if not isSecret(isBoss) and isBoss ~= nil then
-        return isBoss == true
-    end
-    -- Both unavailable — fall back to sourceUnit. If we have one and it
-    -- isn't the player or pet, treat as hostile-cast (= keep the aura).
-    -- Permissive: when sourceUnit is also unknown/secret, let the aura
-    -- through rather than hide it.
-    local src
-    pcall(function() src = aura.sourceUnit end)
-    if not isSecret(src) and type(src) == "string" then
-        return src ~= "player" and src ~= "pet"
-    end
+    -- ALL and BOSS modes both pass through here: the iteration step
+    -- already restricted the aura set (BOSS = specialized RAID filters,
+    -- ALL = plain HARMFUL), so we just trust what came out. Source-based
+    -- heuristics (isFromPlayerOrPlayerPet / isBossAura / sourceUnit) are
+    -- unreliable in 12.0 due to secret-value tagging on hostile sources,
+    -- and the permissive fallback was leaking non-boss debuffs (Sated /
+    -- Temporal Displacement / Exhaustion).
     return true
 end
 
@@ -399,6 +382,7 @@ function TW.UpdateAuras(frame)
     end
 
     local found, foundIdx = {}, {}
+    local mode = db.auraFilterMode or "ALL"
     iterHarmful(frame._unit, maxCount * 4, function(aura, srcIdx)
         if passesFilter(frame._unit, aura, db) then
             -- "Only stacks > 1" filter: only applied when stacks is a
@@ -414,7 +398,7 @@ function TW.UpdateAuras(frame)
             foundIdx[#foundIdx + 1] = srcIdx
             if #found >= maxCount then return true end
         end
-    end)
+    end, mode)
 
     for i = 1, maxCount do
         local b = frame._auras[i]
