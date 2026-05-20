@@ -23,6 +23,9 @@ function TW.OptPages.buildAuras(page)
     addTooltip(makeCheck(page, L["Only debuffs with stacks"], "aurasOnlyStacks", 184, y),
         L["Hide debuffs that don't have a stack count (applications == 1)."])
     y = y - 30
+    addTooltip(markAsNew(makeCheck(page, L["Show spellID in tooltip"], "showSpellIDInTooltip", 14, y), "v1.4.10_spellID"),
+        L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."])
+    y = y - 30
 
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 14, y)

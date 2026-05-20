@@ -126,6 +126,16 @@ local function CreateAuraButton(parent, index)
         elseif idx and idx > 0 and GameTooltip.SetUnitDebuff then
             pcall(GameTooltip.SetUnitDebuff, GameTooltip, unit, idx)
         end
+        -- Append the spellID so tanks can identify a debuff and add it
+        -- to the whitelist/blacklist via the Filters tab without going
+        -- through /tankw auradebug. Gated by db.showSpellIDInTooltip
+        -- (default on).
+        local sid = self._spellId
+        local db = TW.GetDB and TW:GetDB()
+        if db and db.showSpellIDInTooltip ~= false and type(sid) == "number" then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(string.format("|cffaaaaaaspellID|r |cffffff00%d|r", sid))
+        end
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -383,11 +393,14 @@ function TW.UpdateAuras(frame)
             -- Tooltip plumbing: remember the unit + harmful index (legacy
             -- API) and the auraInstanceID (modern secret-safe API). The
             -- OnEnter handler prefers SetUnitBuffByAuraInstanceID when the
-            -- index is -1 (ForEachAura path doesn't expose it).
-            local _instId
+            -- index is -1 (ForEachAura path doesn't expose it). Stash the
+            -- spellID too — OnEnter appends it to the tooltip so tanks
+            -- can read it directly and blacklist via the Filters tab.
+            local _instId, _spellId
             pcall(function() _instId = aura.auraInstanceID end)
-            b._unit, b._harmfulIndex, b._auraInstanceID, b._testMode =
-                frame._unit, foundIdx[i], _instId, false
+            pcall(function() _spellId = aura.spellId end)
+            b._unit, b._harmfulIndex, b._auraInstanceID, b._spellId, b._testMode =
+                frame._unit, foundIdx[i], _instId, _spellId, false
             -- Icon: SetTexture accepts secret values safely (Cell pattern).
             -- Pass directly via pcall — never evaluate truthiness of a
             -- possibly-secret value (`if icon then` would taint).
@@ -533,6 +546,43 @@ function TW:PrintAuraDebug()
         return "ok", count
     end
 
+    -- Per-aura filter classification: dumps every HARMFUL aura on the
+    -- unit with its spellID, name, stacks, and which BOSS_FILTERS accept
+    -- it. Use this to identify a junk debuff leaking through the BOSS
+    -- filter so it can be added to the blacklist.
+    local function dumpFilters(unit)
+        if not (C_UnitAuras and C_UnitAuras.GetAuraSlots
+                and C_UnitAuras.GetAuraDataBySlot) then return end
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
+        if not returns[1] then return end
+        for i = 3, #returns do
+            local slot = returns[i]
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+            if ok and aura then
+                local sid, sname, stacks = "?", "?", "?"
+                pcall(function() sid    = tostring(aura.spellId      or "?") end)
+                pcall(function() sname  = tostring(aura.name         or "?") end)
+                pcall(function() stacks = tostring(aura.applications or "?") end)
+                local instId
+                pcall(function() instId = aura.auraInstanceID end)
+                local matches = {}
+                if type(instId) == "number" and _IsAuraFilteredOut then
+                    for _, f in ipairs(BOSS_FILTERS) do
+                        local notOut
+                        pcall(function() notOut = not _IsAuraFilteredOut(unit, instId, f) end)
+                        if notOut then
+                            matches[#matches + 1] = f:gsub("HARMFUL|", "")
+                        end
+                    end
+                end
+                local tag = (#matches > 0) and ("|cff00ff00BOSS|r " .. table.concat(matches, ","))
+                    or "|cffaaaaaa(none)|r"
+                print(string.format("      %s id=%s stacks=%s  %s",
+                    sname, sid, stacks, tag))
+            end
+        end
+    end
+
     local function scan(unit, label)
         local exists = false
         pcall(function() exists = UnitExists(unit) end)
@@ -544,6 +594,8 @@ function TW:PrintAuraDebug()
         print(string.format("    AuraUtil.ForEachAura → %s, %d auras", s1, c1))
         local s2, c2 = tryIdx(unit)
         print(string.format("    C_UnitAuras.GetAuraDataByIndex → %s, %d auras", s2, c2))
+        print("    per-aura filter match:")
+        dumpFilters(unit)
     end
 
     local TANK = TW.TankFrames or {}

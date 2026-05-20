@@ -174,6 +174,9 @@ L["Thick Outline"] = "Contour épais"
 -- Auras
 L["Show Auras"]              = "Afficher les auras"
 L["Only debuffs with stacks"] = "Uniquement les debuffs avec stacks"
+L["Show spellID in tooltip"] = "Afficher le spellID dans l'infobulle"
+L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."] =
+    "Ajoute une ligne spellID en bas de l'infobulle des debuffs. Pratique pour identifier un debuff et l'ajouter à la whitelist/blacklist dans l'onglet Filtres."
 L["Only boss-cast HARMFUL auras are shown. The stack count is rendered big in the icon center."] =
     "Seules les auras HARMFUL lancées par les boss sont affichées. Le nombre de stacks est rendu en gros au centre de l'icône."
 L["Max Count"]   = "Nombre max"

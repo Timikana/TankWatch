@@ -82,8 +82,21 @@ TW.Defaults = {
     aurasAnchor = "RIGHT", aurasX = 0, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
     auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
+    showSpellIDInTooltip = true, -- append spellID line to debuff tooltips
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
-    auraBlacklist   = {},    -- [spellID] = true  → never show
+    -- Default blacklist: well-known junk debuffs that match Blizzard's
+    -- HARMFUL|RAID filter but aren't actually boss debuffs. User can
+    -- add more via the Filters tab; clearing them via UI re-enables.
+    auraBlacklist   = {
+        [57723]  = true,  -- Exhaustion (Heroism debuff)
+        [57724]  = true,  -- Sated (Bloodlust debuff)
+        [80354]  = true,  -- Temporal Displacement (Time Warp debuff)
+        [264689] = true,  -- Fatigued (Primal Rage debuff)
+        [390435] = true,  -- Exhaustion (newer hero CD variant)
+        [95809]  = true,  -- Insanity (Ancient Hysteria pet debuff)
+        [160455] = true,  -- Sated (alt id seen on some clients)
+        [231443] = true,  -- Bombarding Wind (older)
+    },
 
     -- Stack count: small, bottom-right corner by default
     auraStackAnchor = "BOTTOMRIGHT",
@@ -152,6 +165,18 @@ local function seedDefaults(target)
                 target[k] = v
             end
         end
+    end
+    -- One-time migration: seed the default blacklist entries into
+    -- existing profiles that pre-date this list. Flag stops it from
+    -- re-adding entries the user has explicitly removed.
+    if not target._blacklistSeededV1 then
+        target.auraBlacklist = target.auraBlacklist or {}
+        for id in pairs(TW.Defaults.auraBlacklist or {}) do
+            if target.auraBlacklist[id] == nil then
+                target.auraBlacklist[id] = true
+            end
+        end
+        target._blacklistSeededV1 = true
     end
 end
 
