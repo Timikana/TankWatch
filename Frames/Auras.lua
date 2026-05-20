@@ -35,19 +35,143 @@ end
 -- appear under those specialized slots, never under plain "HARMFUL" —
 -- so we scan each filter, dedupe by auraInstanceID, and emit each
 -- unique aura once via the callback.
--- DandersFrames / Cell pattern: enumerate HARMFUL slots via
--- GetAuraSlots (the canonical entry point) and fetch each aura via
--- GetAuraDataBySlot. This catches every harmful aura the C side knows
--- about — specialized filter strings to AuraUtil.ForEachAura miss some
--- auras on 12.0. Classification (boss debuff vs. self-cast) is done
--- POST-scan in passesFilter via IsAuraFilteredOutByInstanceID.
+-- DandersFrames pattern: event-driven per-unit aura cache. UNIT_AURA
+-- delivers an updateInfo payload that includes addedAuras (full
+-- auraData blob) BEFORE GetAuraSlots can be polled for them — in 12.0
+-- some auras are filtered out of slot enumeration but still ride in
+-- the event payload. We cache by auraInstanceID, populate via the
+-- event handler (TW.HandleUnitAura), and iterate the cache instead of
+-- doing a live scan.
+TW._auraCache = TW._auraCache or {}
+
+local function cacheEntry(unit)
+    if not TW._auraCache[unit] then
+        TW._auraCache[unit] = { byID = {}, order = {} }
+    end
+    return TW._auraCache[unit]
+end
+
+local function cacheAdd(entry, aura, instId)
+    if not entry.byID[instId] then
+        entry.order[#entry.order + 1] = instId
+    end
+    entry.byID[instId] = aura
+end
+
+local function cacheRemove(entry, instId)
+    if entry.byID[instId] then
+        entry.byID[instId] = nil
+        for i, oid in ipairs(entry.order) do
+            if oid == instId then table.remove(entry.order, i); break end
+        end
+    end
+end
+
+-- Full GetAuraSlots scan — used to bootstrap the cache when we don't
+-- yet have one for a unit (first-access) or when the event payload
+-- says isFullUpdate (Blizzard signal that the cache is stale).
+local function rescanFull(unit)
+    local entry = cacheEntry(unit)
+    wipe(entry.byID)
+    wipe(entry.order)
+    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots
+            and C_UnitAuras.GetAuraDataBySlot) then return end
+    local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
+    if not returns[1] then return end
+    for i = 3, #returns do
+        local slot = returns[i]
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+        if ok and aura then
+            local instId
+            pcall(function() instId = aura.auraInstanceID end)
+            if type(instId) == "number" then
+                cacheAdd(entry, aura, instId)
+            end
+        end
+    end
+end
+
+-- Public event handler — called from the OnEvent dispatcher in Tank.lua
+-- on every UNIT_AURA for tank-frame units. Applies the delta when
+-- updateInfo is present, full rescan otherwise.
+function TW:HandleUnitAura(unit, updateInfo)
+    if not unit then return end
+    if not updateInfo or updateInfo.isFullUpdate then
+        rescanFull(unit)
+        return
+    end
+    local entry = cacheEntry(unit)
+    if updateInfo.addedAuras then
+        for _, aura in ipairs(updateInfo.addedAuras) do
+            local instId
+            pcall(function() instId = aura.auraInstanceID end)
+            if type(instId) == "number" then
+                -- Categorize via IsAuraFilteredOutByInstanceID against
+                -- "HARMFUL": the addedAuras payload is a flat list of
+                -- helpful AND harmful auras. We only want harmful here.
+                -- (auraData.isHarmful is secret-tagged on Midnight per
+                -- the oUF reference, so the secret-safe C function is
+                -- the only reliable categorizer.)
+                local isHarmful = true
+                if _IsAuraFilteredOut then
+                    pcall(function()
+                        isHarmful = not _IsAuraFilteredOut(unit, instId, "HARMFUL")
+                    end)
+                end
+                if isHarmful then cacheAdd(entry, aura, instId) end
+            end
+        end
+    end
+    if updateInfo.updatedAuraInstanceIDs then
+        for _, id in ipairs(updateInfo.updatedAuraInstanceIDs) do
+            if entry.byID[id] and C_UnitAuras
+               and C_UnitAuras.GetAuraDataByAuraInstanceID then
+                local ok, fresh = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
+                if ok and fresh then entry.byID[id] = fresh end
+            end
+        end
+    end
+    if updateInfo.removedAuraInstanceIDs then
+        for _, id in ipairs(updateInfo.removedAuraInstanceIDs) do
+            cacheRemove(entry, id)
+        end
+    end
+end
+
+-- Wipe cache for a unit (or all units when unit is nil). Called on
+-- roster changes so stale entries from old tanks don't linger.
+function TW:WipeAuraCache(unit)
+    if unit then
+        TW._auraCache[unit] = nil
+    else
+        wipe(TW._auraCache)
+    end
+end
+
 local function iterHarmful(unit, max, callback, mode)
-    -- mode is accepted for API symmetry but iteration always uses plain
-    -- HARMFUL. BOSS mode filters happen later in passesFilter.
+    -- mode is accepted for API symmetry; cache always holds HARMFUL.
+    -- Read from cache; populate via rescanFull if first access.
+    local entry = TW._auraCache[unit]
+    if not entry then
+        rescanFull(unit)
+        entry = TW._auraCache[unit]
+    end
+    if entry then
+        local emitted = 0
+        for _, instId in ipairs(entry.order) do
+            local aura = entry.byID[instId]
+            if aura then
+                if callback(aura, -1) then return "cache" end
+                emitted = emitted + 1
+                if emitted >= max then return "cache" end
+            end
+        end
+        return "cache"
+    end
+    -- Legacy fallbacks (Classic / pre-12.0 retail) bypass the cache.
     if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
         local emitted = 0
         local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", max) }
-        -- returns: [1] = ok flag from pcall, [2] = continuationToken, [3..] = slots
         if not returns[1] then return "GetAuraSlots-failed" end
         for i = 3, #returns do
             local slot = returns[i]

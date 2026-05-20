@@ -1396,12 +1396,16 @@ ev:RegisterEvent("PLAYER_UNGHOST")
 ev:RegisterEvent("PLAYER_ALIVE")
 ev:RegisterEvent("UNIT_FLAGS")
 ev:RegisterEvent("RAID_TARGET_UPDATE")
-ev:SetScript("OnEvent", function(self, event, unit)
+ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
         TW:RefreshTanks()
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        -- Wipe the per-unit aura cache so stale entries from removed
+        -- tanks (or unit-token reassignments after a roster shuffle)
+        -- don't linger. The cache repopulates on the next UNIT_AURA.
+        if TW.WipeAuraCache then TW:WipeAuraCache() end
         TW:RefreshTanks()
     elseif event == "RAID_TARGET_UPDATE" then
         -- RAID_TARGET_UPDATE has no unit arg; refresh every visible frame's marker
@@ -1413,6 +1417,13 @@ ev:SetScript("OnEvent", function(self, event, unit)
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
         or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_FLAGS"
         or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
+        -- Feed the aura cache the event payload BEFORE refreshing
+        -- frames so the cache has up-to-date data when UpdateAuras
+        -- iterates it. The 2nd updateInfo arg is only present on
+        -- UNIT_AURA events; harmless for others (nil).
+        if event == "UNIT_AURA" and TW.HandleUnitAura then
+            TW:HandleUnitAura(unit, updateInfo)
+        end
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
             if f and f._unit then
