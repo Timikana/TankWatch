@@ -35,55 +35,32 @@ end
 -- appear under those specialized slots, never under plain "HARMFUL" —
 -- so we scan each filter, dedupe by auraInstanceID, and emit each
 -- unique aura once via the callback.
--- BOSS mode: only the specialized "RAID-relevant" filter strings. Each
--- aura returned by ForEachAura under one of these filters is already
--- classified by Blizzard as a boss debuff / raid-important aura — no
--- post-filtering needed. Excludes plain "HARMFUL" so self-cast debuffs
--- like Sated / Temporal Displacement / Exhaustion don't leak in.
--- ALL mode: plain HARMFUL.
-local SCAN_FILTERS_BOSS = {
-    "HARMFUL|RAID",
-    "HARMFUL|RAID_IN_COMBAT",
-    "HARMFUL|IMPORTANT",
-    "HARMFUL|DISPELLABLE",
-    "HARMFUL|RAID_PLAYER_DISPELLABLE",
-}
-local SCAN_FILTERS_ALL = { "HARMFUL" }
+-- DandersFrames / Cell pattern: enumerate HARMFUL slots via
+-- GetAuraSlots (the canonical entry point) and fetch each aura via
+-- GetAuraDataBySlot. This catches every harmful aura the C side knows
+-- about — specialized filter strings to AuraUtil.ForEachAura miss some
+-- auras on 12.0. Classification (boss debuff vs. self-cast) is done
+-- POST-scan in passesFilter via IsAuraFilteredOutByInstanceID.
 local function iterHarmful(unit, max, callback, mode)
-    local SCAN_FILTERS = (mode == "ALL") and SCAN_FILTERS_ALL or SCAN_FILTERS_BOSS
-    if _G.AuraUtil and AuraUtil.ForEachAura then
-        local seen, emitted, stopAll = {}, 0, false
-        for _, filter in ipairs(SCAN_FILTERS) do
-            if stopAll then break end
-            -- usePackedAura = true so the callback receives the aura
-            -- TABLE (with .spellId, .applications, etc.) instead of
-            -- unpacked positional args.
-            pcall(AuraUtil.ForEachAura, unit, filter, max, function(aura)
-                if not aura then return true end
-                local instId
-                pcall(function() instId = aura.auraInstanceID end)
-                local key = (type(instId) == "number") and instId
-                if key and seen[key] then return false end
-                if key then seen[key] = true end
-                -- No usable index for SetUnitDebuff tooltip API when
-                -- coming from ForEachAura, but the tooltip path now
-                -- prefers SetUnitBuffByAuraInstanceID anyway (modern
-                -- secret-safe API) so we pass -1 as a sentinel.
-                if callback(aura, -1) then
-                    stopAll = true
-                    return true
-                end
+    -- mode is accepted for API symmetry but iteration always uses plain
+    -- HARMFUL. BOSS mode filters happen later in passesFilter.
+    if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
+        local emitted = 0
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", max) }
+        -- returns: [1] = ok flag from pcall, [2] = continuationToken, [3..] = slots
+        if not returns[1] then return "GetAuraSlots-failed" end
+        for i = 3, #returns do
+            local slot = returns[i]
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+            if ok and aura then
+                if callback(aura, -1) then break end
                 emitted = emitted + 1
-                if emitted >= max then
-                    stopAll = true
-                    return true
-                end
-                return false
-            end, true)
+                if emitted >= max then break end
+            end
         end
-        return "ForEachAura+filters"
+        return "GetAuraSlots+GetAuraDataBySlot"
     elseif C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        -- Fallback path (older builds): plain HARMFUL indexed scan.
+        -- Older retail builds without GetAuraSlots — indexed scan.
         for i = 1, max do
             local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
             if not ok or not aura then break end
@@ -306,12 +283,12 @@ local function getSpellID(aura)
     return sid
 end
 
--- DandersFrames-style boss debuff detection. Cascades through every
--- HARMFUL|* filter Blizzard ships, returns true on the first one the
--- aura passes. Single "HARMFUL|RAID" is too strict — M+/dungeon
--- debuffs are often only tagged IMPORTANT or RAID_IN_COMBAT. All checks
--- are secret-safe (the API doesn't read the secret-tagged isBossAura).
--- Returns nil if the API isn't available (Classic / older retail).
+-- DandersFrames / Cell pattern: post-scan boss debuff classification.
+-- We iterate ALL harmful auras (broad scan) and then check each one
+-- against the 5 RAID-relevant filter strings via the C function
+-- IsAuraFilteredOutByInstanceID. If ANY filter accepts the aura, it's
+-- a boss debuff. This is secret-safe — the C function doesn't read
+-- the secret-tagged isBossAura field, only the auraInstanceID (regular).
 local _IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local BOSS_FILTERS = {
     "HARMFUL|RAID",
@@ -320,44 +297,40 @@ local BOSS_FILTERS = {
     "HARMFUL|DISPELLABLE",
     "HARMFUL|RAID_PLAYER_DISPELLABLE",
 }
-local function passesRaidFilter(unit, aura)
-    if not _IsAuraFilteredOut or not aura then return nil end
-    local instId
-    pcall(function() instId = aura.auraInstanceID end)
-    if isSecret(instId) or type(instId) ~= "number" then return nil end
-    for _, f in ipairs(BOSS_FILTERS) do
-        local notFiltered
-        pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, f) end)
-        if notFiltered == true then return true end
-    end
-    -- None of the Blizzard boss-debuff filters claimed this aura.
-    -- Return nil (not false) so the caller can still try the legacy
-    -- isFromPlayerOrPlayerPet / sourceUnit cascade, which catches
-    -- hostile-cast auras Blizzard doesn't tag specifically.
-    return nil
-end
 
 local function passesFilter(unit, aura, db)
     if not aura then return false end
     local sid = getSpellID(aura)
 
-    -- Blacklist always wins; whitelist forces show even when iteration
-    -- mode would filter the aura out.
+    -- Blacklist always wins; whitelist forces show even when BOSS mode
+    -- would filter the aura out (useful for boss debuffs not tagged
+    -- RAID/IMPORTANT by Blizzard).
     if sid then
         if db.auraBlacklist and db.auraBlacklist[sid] then return false end
         if db.auraWhitelist and db.auraWhitelist[sid] then return true  end
     end
 
     local mode = db.auraFilterMode or "ALL"
+    if mode == "ALL"       then return true  end
     if mode == "WHITELIST" then return false end
-    -- ALL and BOSS modes both pass through here: the iteration step
-    -- already restricted the aura set (BOSS = specialized RAID filters,
-    -- ALL = plain HARMFUL), so we just trust what came out. Source-based
-    -- heuristics (isFromPlayerOrPlayerPet / isBossAura / sourceUnit) are
-    -- unreliable in 12.0 due to secret-value tagging on hostile sources,
-    -- and the permissive fallback was leaking non-boss debuffs (Sated /
-    -- Temporal Displacement / Exhaustion).
-    return true
+
+    -- BOSS mode: classify post-scan via IsAuraFilteredOutByInstanceID,
+    -- which is the SECRET-SAFE Blizzard C function for "would this aura
+    -- match filter X". Returns true (= would be filtered out) for auras
+    -- that don't pass the filter — we accept the aura if ANY of the 5
+    -- RAID-relevant filters DOESN'T filter it out. No source-based
+    -- fallback: if Blizzard doesn't tag it as raid-relevant, we hide it
+    -- (this prevents Sated / Temporal Displacement / Exhaustion leaks).
+    if not _IsAuraFilteredOut then return false end
+    local instId
+    pcall(function() instId = aura.auraInstanceID end)
+    if type(instId) ~= "number" then return false end
+    for _, f in ipairs(BOSS_FILTERS) do
+        local notFiltered
+        pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, f) end)
+        if notFiltered == true then return true end
+    end
+    return false
 end
 
 local function getStacks(aura)
