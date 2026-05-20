@@ -28,14 +28,13 @@ end
 -- getStacks, the icon/timer paths). Secret-value paths are no-ops on
 -- Classic since secrets are a 12.0 concept — `isSecret` returns false
 -- when issecretvalue isn't defined.
--- DandersFrames-style multi-filter scan. A plain "HARMFUL" iteration on
--- 12.0 can MISS boss debuffs on friendly units because some auras are
--- only exposed through the specific RAID/IMPORTANT/DISPELLABLE filter
--- slots (the "private" aura plumbing). We scan each filter, dedupe by
--- auraInstanceID, and emit each unique aura once. Order matters only
--- for the index passed to the callback (used for tooltip SetUnitDebuff)
--- — we prefer the "HARMFUL" slot index when available since that's the
--- one Blizzard's tooltip API expects.
+-- DandersFrames / Cell pattern: AuraUtil.ForEachAura is the only path
+-- that accepts the specialized HARMFUL|RAID / RAID_IN_COMBAT / IMPORTANT
+-- / DISPELLABLE filter strings (C_UnitAuras.GetAuraDataByIndex ignores
+-- the pipe suffix). Some boss debuffs on friendly units in 12.0 ONLY
+-- appear under those specialized slots, never under plain "HARMFUL" —
+-- so we scan each filter, dedupe by auraInstanceID, and emit each
+-- unique aura once via the callback.
 local SCAN_FILTERS = {
     "HARMFUL",
     "HARMFUL|RAID",
@@ -45,31 +44,46 @@ local SCAN_FILTERS = {
     "HARMFUL|RAID_PLAYER_DISPELLABLE",
 }
 local function iterHarmful(unit, max, callback)
-    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        local seen, emitted, stop = {}, 0, false
+    if _G.AuraUtil and AuraUtil.ForEachAura then
+        local seen, emitted, stopAll = {}, 0, false
         for _, filter in ipairs(SCAN_FILTERS) do
-            if stop then break end
-            for i = 1, max do
-                local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
-                if not ok or not aura then break end
+            if stopAll then break end
+            -- usePackedAura = true so the callback receives the aura
+            -- TABLE (with .spellId, .applications, etc.) instead of
+            -- unpacked positional args.
+            pcall(AuraUtil.ForEachAura, unit, filter, max, function(aura)
+                if not aura then return true end
                 local instId
                 pcall(function() instId = aura.auraInstanceID end)
                 local key = (type(instId) == "number") and instId
-                    or (filter .. ":" .. i)
-                if not seen[key] then
-                    seen[key] = true
-                    -- Pass the HARMFUL-slot index when we're on the
-                    -- "HARMFUL" pass (Blizzard's tooltip API uses it);
-                    -- for the specialized filters there's no equivalent
-                    -- HARMFUL index — pass i as a best-effort, the
-                    -- tooltip falls back gracefully.
-                    if callback(aura, i) then stop = true; break end
-                    emitted = emitted + 1
-                    if emitted >= max then stop = true; break end
+                if key and seen[key] then return false end
+                if key then seen[key] = true end
+                -- No usable index for SetUnitDebuff tooltip API when
+                -- coming from ForEachAura, but the tooltip path now
+                -- prefers SetUnitBuffByAuraInstanceID anyway (modern
+                -- secret-safe API) so we pass -1 as a sentinel.
+                if callback(aura, -1) then
+                    stopAll = true
+                    return true
                 end
-            end
+                emitted = emitted + 1
+                if emitted >= max then
+                    stopAll = true
+                    return true
+                end
+                return false
+            end, true)
         end
-        return "GetAuraDataByIndex+filters"
+        return "ForEachAura+filters"
+    elseif C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        -- Fallback path (older builds): plain HARMFUL indexed scan.
+        for i = 1, max do
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+            if not ok or not aura then break end
+            local stop = callback(aura, i)
+            if stop then break end
+        end
+        return "GetAuraDataByIndex"
     elseif _G.UnitAura then
         for i = 1, max do
             local name, icon, count, _, duration, expirationTime,
@@ -116,11 +130,19 @@ local function CreateAuraButton(parent, index)
         end
         local unit = self._unit
         local idx  = self._harmfulIndex
-        if unit and idx and GameTooltip.SetUnitDebuff then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local instId = self._auraInstanceID
+        if not unit then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        -- Prefer the modern secret-safe API; fall back to the legacy
+        -- index-based one when no instance ID is available.
+        if type(instId) == "number"
+           and GameTooltip.SetUnitBuffByAuraInstanceID then
+            pcall(GameTooltip.SetUnitBuffByAuraInstanceID, GameTooltip,
+                  unit, instId, "HARMFUL")
+        elseif idx and idx > 0 and GameTooltip.SetUnitDebuff then
             pcall(GameTooltip.SetUnitDebuff, GameTooltip, unit, idx)
-            GameTooltip:Show()
         end
+        GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -398,9 +420,14 @@ function TW.UpdateAuras(frame)
         local b = frame._auras[i]
         local aura = found[i]
         if aura then
-            -- Tooltip plumbing: remember the unit and the original HARMFUL
-            -- index so OnEnter can call GameTooltip:SetUnitDebuff(unit, idx).
-            b._unit, b._harmfulIndex, b._testMode = frame._unit, foundIdx[i], false
+            -- Tooltip plumbing: remember the unit + harmful index (legacy
+            -- API) and the auraInstanceID (modern secret-safe API). The
+            -- OnEnter handler prefers SetUnitBuffByAuraInstanceID when the
+            -- index is -1 (ForEachAura path doesn't expose it).
+            local _instId
+            pcall(function() _instId = aura.auraInstanceID end)
+            b._unit, b._harmfulIndex, b._auraInstanceID, b._testMode =
+                frame._unit, foundIdx[i], _instId, false
             -- Icon: SetTexture accepts secret values safely (Cell pattern).
             -- Pass directly via pcall — never evaluate truthiness of a
             -- possibly-secret value (`if icon then` would taint).
