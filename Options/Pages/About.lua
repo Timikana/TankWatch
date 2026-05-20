@@ -9,6 +9,15 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.10
+
+|cffffd700Fixed|r — Missing boss debuffs on co-tank frames
+- The HARMFUL aura scan was missing debuffs that only appear under
+  Blizzard's "private" RAID / IMPORTANT / DISPELLABLE filter slots
+  on 12.0 (DandersFrames showed them, TankWatch didn't). The scanner
+  now iterates every relevant filter string and deduplicates by
+  auraInstanceID — same pattern as Cell / DandersFrames.
+
 ## v1.4.9
 
 |cffffd700New|r — Right-click + raid markers on tank frames

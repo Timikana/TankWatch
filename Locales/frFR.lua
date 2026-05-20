@@ -471,6 +471,15 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.10
+
+|cffffd700Corrigé|r — Debuffs de boss manquants sur les cadres de co-tanks
+- Le scan d'auras HARMFUL ratait des debuffs qui n'apparaissent que
+  sous les filtres "privés" RAID / IMPORTANT / DISPELLABLE en 12.0
+  (DandersFrames les affichait, TankWatch non). Le scanner itère
+  désormais chaque filtre pertinent et déduplique par auraInstanceID
+  — même pattern que Cell / DandersFrames.
+
 ## v1.4.9
 
 |cffffd700Nouveau|r — Clic droit + marqueurs de raid sur les cadres

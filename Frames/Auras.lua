@@ -28,15 +28,48 @@ end
 -- getStacks, the icon/timer paths). Secret-value paths are no-ops on
 -- Classic since secrets are a 12.0 concept — `isSecret` returns false
 -- when issecretvalue isn't defined.
+-- DandersFrames-style multi-filter scan. A plain "HARMFUL" iteration on
+-- 12.0 can MISS boss debuffs on friendly units because some auras are
+-- only exposed through the specific RAID/IMPORTANT/DISPELLABLE filter
+-- slots (the "private" aura plumbing). We scan each filter, dedupe by
+-- auraInstanceID, and emit each unique aura once. Order matters only
+-- for the index passed to the callback (used for tooltip SetUnitDebuff)
+-- — we prefer the "HARMFUL" slot index when available since that's the
+-- one Blizzard's tooltip API expects.
+local SCAN_FILTERS = {
+    "HARMFUL",
+    "HARMFUL|RAID",
+    "HARMFUL|RAID_IN_COMBAT",
+    "HARMFUL|IMPORTANT",
+    "HARMFUL|DISPELLABLE",
+    "HARMFUL|RAID_PLAYER_DISPELLABLE",
+}
 local function iterHarmful(unit, max, callback)
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        for i = 1, max do
-            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
-            if not ok or not aura then break end
-            local stop = callback(aura, i)
+        local seen, emitted, stop = {}, 0, false
+        for _, filter in ipairs(SCAN_FILTERS) do
             if stop then break end
+            for i = 1, max do
+                local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
+                if not ok or not aura then break end
+                local instId
+                pcall(function() instId = aura.auraInstanceID end)
+                local key = (type(instId) == "number") and instId
+                    or (filter .. ":" .. i)
+                if not seen[key] then
+                    seen[key] = true
+                    -- Pass the HARMFUL-slot index when we're on the
+                    -- "HARMFUL" pass (Blizzard's tooltip API uses it);
+                    -- for the specialized filters there's no equivalent
+                    -- HARMFUL index — pass i as a best-effort, the
+                    -- tooltip falls back gracefully.
+                    if callback(aura, i) then stop = true; break end
+                    emitted = emitted + 1
+                    if emitted >= max then stop = true; break end
+                end
+            end
         end
-        return "GetAuraDataByIndex"
+        return "GetAuraDataByIndex+filters"
     elseif _G.UnitAura then
         for i = 1, max do
             local name, icon, count, _, duration, expirationTime,
