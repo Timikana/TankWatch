@@ -109,6 +109,11 @@ local function CreateAuraButton(parent, index)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(self._testName or "Test debuff", 1, 0.4, 0.4)
             GameTooltip:AddLine("Test mode", 0.7, 0.7, 0.7)
+            local db = TW.GetDB and TW:GetDB()
+            if db and db.showSpellIDInTooltip ~= false then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("|cffaaaaaaspellID|r |cffffff009999|r (test)")
+            end
             GameTooltip:Show()
             return
         end
@@ -126,16 +131,9 @@ local function CreateAuraButton(parent, index)
         elseif idx and idx > 0 and GameTooltip.SetUnitDebuff then
             pcall(GameTooltip.SetUnitDebuff, GameTooltip, unit, idx)
         end
-        -- Append the spellID so tanks can identify a debuff and add it
-        -- to the whitelist/blacklist via the Filters tab without going
-        -- through /tankw auradebug. Gated by db.showSpellIDInTooltip
-        -- (default on).
-        local sid = self._spellId
-        local db = TW.GetDB and TW:GetDB()
-        if db and db.showSpellIDInTooltip ~= false and type(sid) == "number" then
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(string.format("|cffaaaaaaspellID|r |cffffff00%d|r", sid))
-        end
+        -- spellID line is appended by the global TooltipDataProcessor
+        -- hook in TankWatch.lua — works for every tooltip in the UI
+        -- (BuffFrame, action bars, /cast preview, etc.), not just ours.
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -315,35 +313,24 @@ local function passesFilter(unit, aura, db)
     if not aura then return false end
     local sid = getSpellID(aura)
 
-    -- Blacklist always wins; whitelist forces show even when BOSS mode
-    -- would filter the aura out (useful for boss debuffs not tagged
-    -- RAID/IMPORTANT by Blizzard).
+    -- Blacklist beats everything; whitelist beats mode.
     if sid then
         if db.auraBlacklist and db.auraBlacklist[sid] then return false end
         if db.auraWhitelist and db.auraWhitelist[sid] then return true  end
     end
 
     local mode = db.auraFilterMode or "ALL"
-    if mode == "ALL"       then return true  end
     if mode == "WHITELIST" then return false end
 
-    -- BOSS mode: classify post-scan via IsAuraFilteredOutByInstanceID,
-    -- which is the SECRET-SAFE Blizzard C function for "would this aura
-    -- match filter X". Returns true (= would be filtered out) for auras
-    -- that don't pass the filter — we accept the aura if ANY of the 5
-    -- RAID-relevant filters DOESN'T filter it out. No source-based
-    -- fallback: if Blizzard doesn't tag it as raid-relevant, we hide it
-    -- (this prevents Sated / Temporal Displacement / Exhaustion leaks).
-    if not _IsAuraFilteredOut then return false end
-    local instId
-    pcall(function() instId = aura.auraInstanceID end)
-    if type(instId) ~= "number" then return false end
-    for _, f in ipairs(BOSS_FILTERS) do
-        local notFiltered
-        pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, f) end)
-        if notFiltered == true then return true end
-    end
-    return false
+    -- ALL and BOSS modes: trust the iteration. No Blizzard filter string
+    -- cleanly maps to "boss debuff only" — HARMFUL|RAID misses many real
+    -- boss mechanics (observed on Chimaerus while DandersFrames showed
+    -- them), and HARMFUL|DISPELLABLE leaks player cooldowns. The robust
+    -- approach (DandersFrames pattern: directDebuffShowAll = true by
+    -- default) is to show every HARMFUL aura and let the blacklist
+    -- handle noise. The default blacklist already covers Sated /
+    -- Exhaustion / Temporal Displacement / DK rez lockout / etc.
+    return true
 end
 
 local function getStacks(aura)

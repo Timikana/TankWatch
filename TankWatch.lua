@@ -807,6 +807,32 @@ init:SetScript("OnEvent", function()
     if TW.RegisterBlizzardSettings then TW:RegisterBlizzardSettings() end
     if TW.CreateMinimapButton then TW:CreateMinimapButton() end
     if TW.RegisterLDB then TW:RegisterLDB() end
+
+    -- Global spellID-in-tooltip hook. Uses TooltipDataProcessor (12.0+)
+    -- to append "spellID NNNN" to every spell / aura tooltip rendered
+    -- anywhere in the UI — BuffFrame, debuffs, action bar hover, /cast
+    -- preview, etc. Gated by db.showSpellIDInTooltip (default on). The
+    -- per-frame AddLine logic in Auras.lua is now redundant for the
+    -- real-aura case but kept for test mode (where there's no spellID
+    -- to surface via the data processor).
+    if _G.TooltipDataProcessor and _G.Enum and Enum.TooltipDataType then
+        local function appendSpellID(tt, data)
+            if not data or type(data.id) ~= "number" then return end
+            local db = TW.GetDB and TW:GetDB()
+            if not db or db.showSpellIDInTooltip == false then return end
+            tt:AddLine(" ")
+            tt:AddLine(string.format("|cffaaaaaaspellID|r |cffffff00%d|r", data.id))
+        end
+        local types = {
+            Enum.TooltipDataType.Spell,
+            Enum.TooltipDataType.UnitAura,
+        }
+        for _, t in ipairs(types) do
+            if t then
+                pcall(TooltipDataProcessor.AddTooltipPostCall, t, appendSpellID)
+            end
+        end
+    end
     print(format(TW.L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"],
         (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Version")) or "?"))
     -- Classic-era beta notice. WOW_PROJECT_ID == WOW_PROJECT_MAINLINE on
