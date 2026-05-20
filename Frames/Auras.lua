@@ -290,12 +290,15 @@ end
 -- a boss debuff. This is secret-safe — the C function doesn't read
 -- the secret-tagged isBossAura field, only the auraInstanceID (regular).
 local _IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+-- Conservative set: only Blizzard's actually-boss-related classifiers.
+-- HARMFUL|DISPELLABLE and HARMFUL|RAID_PLAYER_DISPELLABLE are NOT in
+-- the list — they match every dispellable debuff (player cooldowns
+-- like the DK "Recently Raised" 10-min Raise Ally lockout get tagged
+-- dispellable C-side and would leak in).
 local BOSS_FILTERS = {
-    "HARMFUL|RAID",
-    "HARMFUL|RAID_IN_COMBAT",
-    "HARMFUL|IMPORTANT",
-    "HARMFUL|DISPELLABLE",
-    "HARMFUL|RAID_PLAYER_DISPELLABLE",
+    "HARMFUL|RAID",            -- Blizzard's primary "show on raid frame" filter
+    "HARMFUL|RAID_IN_COMBAT",  -- combat-only raid debuffs
+    "HARMFUL|IMPORTANT",       -- M+ / dungeon importance flag
 }
 
 local function passesFilter(unit, aura, db)
