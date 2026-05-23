@@ -556,33 +556,33 @@ function TW.UpdateAuras(frame)
             local instId
             pcall(function() instId = aura.auraInstanceID end)
 
-            -- Stacks: prefer the regular aura.applications field (non-secret
-            -- on friendly raid units, which is where TankWatch operates).
-            -- Fall back to Blizzard's secret-aware display API only if the
-            -- direct read returns secret or nil — handles edge cases where
-            -- the aura record is sealed by a hostile source.
-            local stacks = getStacks(aura)
-            if not isSecret(stacks) and type(stacks) == "number" then
-                if stacks > 1 then
-                    b.stacks:SetText(tostring(stacks))
-                else
-                    b.stacks:SetText("")
+            -- Stacks — DandersFrames pattern: always use the C API
+            -- GetAuraApplicationDisplayCount(unit, instId, min, max). It
+            -- returns the count as a string (secret-tagged if the aura
+            -- is secret-sourced) and handles every edge case C-side:
+            --   below `min` → empty string (hide)
+            --   above `max` → "*" (overflow indicator)
+            --   otherwise  → the count
+            -- SetText accepts secret strings safely. Reading
+            -- aura.applications directly was unreliable: it returns nil
+            -- or 0 on many secret-tagged auras even when there ARE
+            -- stacks, hiding legitimate stack counts.
+            b.stacks:SetText("")
+            if type(instId) == "number"
+               and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                local stackText
+                pcall(function()
+                    stackText = C_UnitAuras.GetAuraApplicationDisplayCount(
+                        frame._unit, instId, 2, 99)
+                end)
+                if stackText ~= nil then
+                    pcall(b.stacks.SetText, b.stacks, stackText)
                 end
             else
-                local stackTxt
-                if not isSecret(instId) and instId
-                   and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
-                    pcall(function()
-                        stackTxt = C_UnitAuras.GetAuraApplicationDisplayCount(
-                            frame._unit, instId, 2, 99)
-                    end)
-                end
-                if isSecret(stackTxt) then
-                    pcall(b.stacks.SetText, b.stacks, stackTxt)
-                elseif stackTxt ~= nil and stackTxt ~= "" then
-                    b.stacks:SetText(stackTxt)
-                else
-                    b.stacks:SetText("")
+                -- Pre-12.0 / Classic fallback: read applications directly.
+                local stacks = getStacks(aura)
+                if type(stacks) == "number" and stacks > 1 then
+                    b.stacks:SetText(tostring(stacks))
                 end
             end
 
