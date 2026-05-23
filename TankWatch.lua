@@ -348,6 +348,50 @@ function TW:ResetAuraSettings()
 end
 
 -- ============================================================
+-- WHITELIST / BLACKLIST SHARING
+-- ------------------------------------------------------------
+-- Tiny serialization for sharing aura lists on Discord etc. Format
+-- is just a comma-separated string of decimal spellIDs — no prefix,
+-- no Lua serialization, no base64. Anyone can paste it from any
+-- source. `which` is either "auraWhitelist" or "auraBlacklist".
+-- ============================================================
+function TW:ExportAuraList(which)
+    local p = TW:GetDB()
+    local t = p[which]
+    if type(t) ~= "table" then return "" end
+    local ids = {}
+    for sid in pairs(t) do
+        if type(sid) == "number" then ids[#ids + 1] = sid end
+    end
+    table.sort(ids)
+    return table.concat(ids, ",")
+end
+
+-- Parse a comma/space/newline-separated list of spellIDs and ADD them
+-- to the target list (merge mode). Returns count of new entries added.
+-- If `replace` is true, the existing list is wiped first.
+function TW:ImportAuraList(which, str, replace)
+    if which ~= "auraWhitelist" and which ~= "auraBlacklist" then
+        return 0, "invalid list"
+    end
+    local p = TW:GetDB()
+    p[which] = p[which] or {}
+    if replace then
+        for k in pairs(p[which]) do p[which][k] = nil end
+    end
+    local added = 0
+    for token in tostring(str or ""):gmatch("%d+") do
+        local sid = tonumber(token)
+        if sid and sid > 0 and not p[which][sid] then
+            p[which][sid] = true
+            added = added + 1
+        end
+    end
+    if TW.RefreshAll then TW:RefreshAll() end
+    return added
+end
+
+-- ============================================================
 -- PROFILE SERIALIZATION (export / import)
 -- Format: "TW2!" .. base64(lua_table_literal)
 -- Legacy "TW1!" .. lua_table_literal is still accepted on import.

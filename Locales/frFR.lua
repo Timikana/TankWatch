@@ -94,6 +94,16 @@ L["All harmful debuffs"]                       = "Tous les debuffs nocifs"
 L["Boss-cast only"]                            = "Lancés par un boss uniquement"
 L["Whitelist only"]                            = "Whitelist uniquement"
 L["All debuffs (blacklist trims)"]             = "Tous les debuffs (la blacklist filtre)"
+L["Export"] = "Exporter"
+L["Import"] = "Importer"
+L["Copy this list as a comma-separated string of spellIDs to share on Discord."] =
+    "Copier cette liste sous forme de chaîne de spellIDs séparés par des virgules pour la partager sur Discord."
+L["Paste a comma-separated list of spellIDs to add to this list (existing entries are kept)."] =
+    "Coller une liste de spellIDs séparés par des virgules à ajouter à cette liste (les entrées existantes sont conservées)."
+L["Copy this list (Ctrl+A → Ctrl+C):"] = "Copier cette liste (Ctrl+A → Ctrl+C) :"
+L["Paste comma-separated spellIDs:"] = "Coller les spellIDs séparés par des virgules :"
+L["List is empty."] = "La liste est vide."
+L["Added %d spellIDs."] = "%d spellIDs ajoutés."
 L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
     "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =

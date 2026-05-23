@@ -60,6 +60,55 @@ function TW.OptPages.buildFilters(page)
     local wl = makeSpellList(page, "auraWhitelist", L["Whitelist (always show)"], 14,             y, listW, listH)
     local bl = makeSpellList(page, "auraBlacklist", L["Blacklist (never show)"],  14 + listW + 22, y, listW, listH)
 
+    -- Share buttons: export the current whitelist/blacklist as a
+    -- comma-separated string for sharing on Discord/etc., or import
+    -- a pasted string (additive: merges into the existing list).
+    local function makeShareButtons(which, xBase, refreshFn)
+        local btnExport = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+        btnExport:SetSize(70, 22)
+        btnExport:SetPoint("TOPLEFT", xBase, y - listH - 6)
+        btnExport:SetText(L["Export"])
+        addTooltip(btnExport, L["Copy this list as a comma-separated string of spellIDs to share on Discord."])
+        btnExport:SetScript("OnClick", function()
+            local str = TW:ExportAuraList(which)
+            if str == "" then
+                print("|cff00ff96TankWatch:|r " .. L["List is empty."])
+                return
+            end
+            local askName = TW._OptHelpers.askName
+            askName(L["Copy this list (Ctrl+A → Ctrl+C):"], function() end)
+            local p = StaticPopup_Visible("TANKWATCH_PROFILE_NAME")
+            if p then
+                local d = _G[p]
+                if d and d.EditBox then
+                    d.EditBox:SetText(str)
+                    d.EditBox:HighlightText()
+                    d.EditBox:SetFocus()
+                end
+            end
+        end)
+        _registerInSection(btnExport)
+
+        local btnImport = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+        btnImport:SetSize(70, 22)
+        btnImport:SetPoint("LEFT", btnExport, "RIGHT", 6, 0)
+        btnImport:SetText(L["Import"])
+        addTooltip(btnImport, L["Paste a comma-separated list of spellIDs to add to this list (existing entries are kept)."])
+        btnImport:SetScript("OnClick", function()
+            local askName = TW._OptHelpers.askName
+            askName(L["Paste comma-separated spellIDs:"], function(str)
+                local added = TW:ImportAuraList(which, str, false)
+                print("|cff00ff96TankWatch:|r " ..
+                    string.format(L["Added %d spellIDs."] or "Added %d spellIDs.", added or 0))
+                if refreshFn then refreshFn() end
+            end)
+        end)
+        _registerInSection(btnImport)
+    end
+
+    makeShareButtons("auraWhitelist", 14,             function() wl.refresh() end)
+    makeShareButtons("auraBlacklist", 14 + listW + 22, function() bl.refresh() end)
+
     page._refreshFilters = function() wl.refresh(); bl.refresh(); nl.refresh() end
     page._refreshFilters()
 end
