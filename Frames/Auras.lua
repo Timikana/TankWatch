@@ -106,19 +106,30 @@ function TW:HandleUnitAura(unit, updateInfo)
             local instId
             pcall(function() instId = aura.auraInstanceID end)
             if type(instId) == "number" then
-                -- Categorize via IsAuraFilteredOutByInstanceID against
-                -- "HARMFUL": the addedAuras payload is a flat list of
-                -- helpful AND harmful auras. We only want harmful here.
-                -- (auraData.isHarmful is secret-tagged on Midnight per
-                -- the oUF reference, so the secret-safe C function is
-                -- the only reliable categorizer.)
-                local isHarmful = true
+                -- Categorize via IsAuraFilteredOutByInstanceID. The
+                -- addedAuras payload is a FLAT list mixing helpful and
+                -- harmful auras (auraData.isHarmful is secret on Midnight
+                -- per the oUF reference, so we can't read it directly).
+                -- DandersFrames pattern: test HELPFUL first — if the C
+                -- function says "not filtered out by HELPFUL", it's a
+                -- buff, REJECT. Else test HARMFUL — accept only on
+                -- explicit confirmation. Default is REJECT (safer than
+                -- the previous `isHarmful = true` fallback which leaked
+                -- buffs into the cache when either check failed).
+                local accept = false
                 if _IsAuraFilteredOut then
+                    local isHelpful, isHarmful
                     pcall(function()
-                        isHarmful = not _IsAuraFilteredOut(unit, instId, "HARMFUL")
+                        isHelpful = not _IsAuraFilteredOut(unit, instId, "HELPFUL")
                     end)
+                    if isHelpful ~= true then
+                        pcall(function()
+                            isHarmful = not _IsAuraFilteredOut(unit, instId, "HARMFUL")
+                        end)
+                        if isHarmful == true then accept = true end
+                    end
                 end
-                if isHarmful then cacheAdd(entry, aura, instId) end
+                if accept then cacheAdd(entry, aura, instId) end
             end
         end
     end
