@@ -576,6 +576,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintRosterDebug then TW:PrintRosterDebug() end
     elseif cmd == "auradebug" or cmd == "auras" then
         if TW.PrintAuraDebug then TW:PrintAuraDebug() end
+    elseif cmd == "paauradump" or cmd == "padump" or cmd == "pa" then
+        if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
     elseif cmd == "bugreport" or cmd == "report" then
         if TW.ShowBugReport then TW:ShowBugReport() end
     else
@@ -587,6 +589,7 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw reset      - " .. L["reset all settings + reload"])
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
+        print("  /tankw paauradump - " .. (L["dump private aura anchor state per tank"] or "dump private aura anchor state per tank"))
         print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end
 end

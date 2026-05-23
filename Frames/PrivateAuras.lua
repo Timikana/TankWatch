@@ -164,6 +164,44 @@ function TW:ApplyAllPrivateAuras()
     end
 end
 
+-- Diagnostic: print the current private aura anchor registration state
+-- for every tank frame. Invoked by /tankw paauradump. Confirms whether
+-- AddPrivateAuraAnchor actually succeeded for each unit + slot — if a
+-- tank has 0 anchors despite having a unit, the API rejected silently
+-- and we know to investigate further.
+function TW:PrintPrivateAuraDebug()
+    print("|cff00ff96TankWatch:|r private aura diagnostic:")
+    if not canRegister() then
+        print("  C_UnitAuras.AddPrivateAuraAnchor not available on this client")
+        return
+    end
+    if inCombat() then
+        print("  |cffff8800WARNING|r: in combat — registration deferred until PLAYER_REGEN_ENABLED")
+    end
+    local db = TW:GetDB()
+    print(string.format("  config: enabled=%s count=%d size=%d anchor=%s grow=%s",
+        tostring(db.showPrivateAuras), db.privateAuraCount or 4,
+        db.privateAuraSize or 28, db.privateAuraAnchor or "?",
+        db.privateAuraGrowX or "?"))
+    local seen = false
+    for i = 1, (TW.MAX_TANKS or 8) do
+        local f = TW.TankFrames and TW.TankFrames[i]
+        if f then
+            local unit = f._unit or "nil"
+            local nAnchors = f._paAnchorIDs and #f._paAnchorIDs or 0
+            local nHosts = f._paHosts and #f._paHosts or 0
+            local pending = f._paPending and " |cffff8800[PENDING]|r" or ""
+            local visible = f:IsShown() and "shown" or "hidden"
+            if f._unit or nAnchors > 0 or nHosts > 0 then
+                seen = true
+                print(string.format("  tank[%d] unit=%s (%s) anchors=%d hosts=%d%s",
+                    i, tostring(unit), visible, nAnchors, nHosts, pending))
+            end
+        end
+    end
+    if not seen then print("  (no tank frames active)") end
+end
+
 -- Flush any deferred private-aura setup that was delayed because the
 -- C API can't be called during combat lockdown. Hooked into the
 -- PLAYER_REGEN_ENABLED handler in Tank.lua.

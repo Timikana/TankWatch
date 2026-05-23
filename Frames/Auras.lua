@@ -157,14 +157,31 @@ local function iterHarmful(unit, max, callback, mode)
         entry = TW._auraCache[unit]
     end
     if entry then
-        local emitted = 0
+        -- Sort by expirationTime ascending so the most urgent debuffs
+        -- (least time left) reach the renderer first. Permanent auras
+        -- (expirationTime == 0) get pushed to the end via math.huge.
+        -- DandersFrames' RebuildLegacySortedArrays equivalent.
+        local sortable = {}
         for _, instId in ipairs(entry.order) do
             local aura = entry.byID[instId]
             if aura then
-                if callback(aura, -1) then return "cache" end
-                emitted = emitted + 1
-                if emitted >= max then return "cache" end
+                local exp
+                pcall(function() exp = aura.expirationTime end)
+                local key
+                if isSecret(exp) or type(exp) ~= "number" or exp == 0 then
+                    key = math.huge
+                else
+                    key = exp
+                end
+                sortable[#sortable + 1] = { aura = aura, key = key }
             end
+        end
+        table.sort(sortable, function(a, b) return a.key < b.key end)
+        local emitted = 0
+        for _, item in ipairs(sortable) do
+            if callback(item.aura, -1) then return "cache" end
+            emitted = emitted + 1
+            if emitted >= max then return "cache" end
         end
         return "cache"
     end
@@ -565,34 +582,45 @@ function TW.UpdateAuras(frame)
             pcall(function() dur = aura.duration end)
             pcall(function() exp = aura.expirationTime end)
 
-            if not isSecret(dur) and not isSecret(exp)
-               and dur and exp and dur > 0 and exp > 0 then
-                b.cd:SetHideCountdownNumbers(true)
-                b.cd:SetCooldown(exp - dur, dur)
-                -- Live countdown: just tag the button with _exp; a single
-                -- global ticker (registered once at file load) walks every
-                -- visible button at 10 Hz and refreshes the text. Replaces
-                -- the previous per-button OnUpdate (40+ tickers for a full
-                -- raid of 8 tanks × 5 auras).
-                b._exp = exp
-                b.timer:SetText(formatTime(exp - GetTime()))
-            elseif not isSecret(instId) and instId
-                   and C_UnitAuras and C_UnitAuras.GetAuraDuration
-                   and b.cd.SetCooldownFromDurationObject then
+            -- Cooldown swipe — DandersFrames pattern: PREFER the secret-
+            -- safe SetCooldownFromDurationObject API. The Duration object
+            -- returned by GetAuraDuration handles secret-tagged duration
+            -- / expirationTime fields C-side, so the swipe renders even
+            -- on hostile-sourced auras where dur/exp are sealed. Fall
+            -- back to direct SetCooldown(start, dur) only when neither
+            -- the modern API nor a Duration object is available.
+            local cooldownSet = false
+            if type(instId) == "number"
+               and C_UnitAuras and C_UnitAuras.GetAuraDuration
+               and b.cd.SetCooldownFromDurationObject then
                 local durObj
                 local ok = pcall(function()
                     durObj = C_UnitAuras.GetAuraDuration(frame._unit, instId)
                 end)
                 if ok and durObj ~= nil and not isSecret(durObj) then
-                    b.cd:SetHideCountdownNumbers(false)
-                    b.cd:SetCooldownFromDurationObject(durObj)
-                    b.timer:SetText("")
-                    b._exp = nil
-                else
-                    b.cd:Clear()
-                    b.timer:SetText("")
-                    b._exp = nil
+                    b.cd:SetHideCountdownNumbers(true)
+                    pcall(b.cd.SetCooldownFromDurationObject, b.cd, durObj)
+                    cooldownSet = true
                 end
+            end
+            if cooldownSet then
+                -- Best-effort: read the regular dur/exp into _exp for the
+                -- live timer text. If they're secret we just leave timer
+                -- blank — the swipe is the primary visual.
+                if not isSecret(exp) and type(exp) == "number" and exp > 0 then
+                    b._exp = exp
+                    b.timer:SetText(formatTime(exp - GetTime()))
+                else
+                    b._exp = nil
+                    b.timer:SetText("")
+                end
+            elseif not isSecret(dur) and not isSecret(exp)
+                   and dur and exp and dur > 0 and exp > 0 then
+                -- Pre-12.0 / Classic fallback: regular SetCooldown.
+                b.cd:SetHideCountdownNumbers(true)
+                b.cd:SetCooldown(exp - dur, dur)
+                b._exp = exp
+                b.timer:SetText(formatTime(exp - GetTime()))
             else
                 b.cd:Clear()
                 b.timer:SetText("")
