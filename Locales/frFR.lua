@@ -116,6 +116,9 @@ L["Hover color"] = "Couleur survol"
 L["Border color when this tank is your current target."] = "Couleur de la bordure quand ce tank est ta cible actuelle."
 L["Border color when this tank is your focus."] = "Couleur de la bordure quand ce tank est ton focus."
 L["Border color when you mouseover this tank's frame."] = "Couleur de la bordure quand tu survoles le cadre de ce tank."
+L["Pulse animation"] = "Pulsation animée"
+L["Pulse the target / focus border alpha (1.0 ↔ 0.35 over 0.7s, bouncing)."] =
+    "Fait pulser l'alpha de la bordure cible/focus (1.0 ↔ 0.35 sur 0.7s, aller-retour)."
 L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
     "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =

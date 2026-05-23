@@ -96,12 +96,14 @@ TW.Defaults = {
     privateAuraX         = 0,
     privateAuraY         = -32,      -- below the regular debuff row
 
-    -- Selection / hover border (gold = target, cyan = focus, white = hover)
+    -- Selection / hover border (BossWatch pattern: HIGHLIGHT texture for
+    -- hover, BackdropTemplate edge for target/focus, BOUNCE pulse anim)
     showHighlight         = true,
     highlightThickness    = 2,
-    highlightTargetColor  = { r = 1,   g = 0.85, b = 0,   a = 0.9  },
-    highlightFocusColor   = { r = 0.3, g = 0.85, b = 1,   a = 0.85 },
-    highlightHoverColor   = { r = 1,   g = 1,    b = 1,   a = 0.45 },
+    highlightAnimate      = true,
+    highlightTargetColor  = { r = 1,    g = 0.82, b = 0,    a = 1 },
+    highlightFocusColor   = { r = 0.3,  g = 0.85, b = 1,    a = 1 },
+    highlightHoverColor   = { r = 1,    g = 1,    b = 1,    a = 0.15 },
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
     -- Default blacklist: well-known junk debuffs that match Blizzard's
     -- HARMFUL|RAID filter but aren't actually boss debuffs. User can

@@ -457,64 +457,63 @@ local function CreateTankFrame(index)
     deadOverlay:Hide()
     f.deadOverlay = deadOverlay
 
-    -- Selection / hover border. One texture that we tint differently:
-    -- white (faint) on mouseover, gold when this unit is the current
-    -- target, blue when it's the focus. Drawn on a dedicated host
-    -- frame above the bar layers but below the raid target icon host,
-    -- so the icon stays visible on top.
-    local hlHost = CreateFrame("Frame", nil, f)
-    hlHost:SetAllPoints(f)
-    hlHost:SetFrameLevel((f:GetFrameLevel() or 1) + 40)
-    f.highlightHost = hlHost
-    local function makeEdge(point, x1, y1, point2, x2, y2)
-        local t = hlHost:CreateTexture(nil, "OVERLAY")
-        t:SetColorTexture(1, 1, 1, 1)
-        t:SetPoint(point, f, point, x1, y1)
-        if point2 then t:SetPoint(point2, f, point2, x2, y2) end
-        return t
-    end
-    -- 4 edge strips forming a border around the frame. Thickness is
-    -- re-applied on every refreshHighlight from db.highlightThickness
-    -- so the slider takes effect without /reload.
-    local edges = {
-        makeEdge("TOPLEFT",     0, 0, "TOPRIGHT",    0, -2),  -- top
-        makeEdge("BOTTOMLEFT",  0, 2, "BOTTOMRIGHT", 0,  0),  -- bottom
-        makeEdge("TOPLEFT",     0, 0, "BOTTOMLEFT",  2,  0),  -- left
-        makeEdge("TOPRIGHT",   -2, 0, "BOTTOMRIGHT", 0,  0),  -- right
-    }
-    f.highlightEdges = edges
-    local function applyEdgeThickness(t)
-        t = math.max(1, math.min(8, t or 2))
-        edges[1]:ClearAllPoints()
-        edges[1]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-        edges[1]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -t)
-        edges[2]:ClearAllPoints()
-        edges[2]:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  0, t)
-        edges[2]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
-        edges[3]:ClearAllPoints()
-        edges[3]:SetPoint("TOPLEFT",    f, "TOPLEFT",    0, 0)
-        edges[3]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", t, 0)
-        edges[4]:ClearAllPoints()
-        edges[4]:SetPoint("TOPRIGHT",    f, "TOPRIGHT",    -t, 0)
-        edges[4]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT",  0, 0)
-    end
-    f.applyEdgeThickness = applyEdgeThickness
-    local function setHighlight(r, g, b, a)
-        for _, e in ipairs(edges) do e:SetVertexColor(r, g, b, a or 1) end
-    end
-    f.setHighlight = setHighlight
-    setHighlight(1, 1, 1, 0)  -- start hidden
-    -- Apply target / focus / hover priority on each refresh.
-    --   target  → yellow  (1, 0.85, 0)
-    --   focus   → cyan    (0.3, 0.85, 1)
-    --   hover   → white   (1, 1, 1, 0.5)
-    --   else    → hidden
+    -- Selection / hover border — BossWatch pattern:
+    --   1. Native HIGHLIGHT draw-layer texture for mouseover. Blizzard
+    --      auto-shows it when the frame is moused over (zero events).
+    --   2. BackdropTemplate child frame with edgeFile for target/focus.
+    --      Cleaner than 4 manually-anchored strips, and the edge thickness
+    --      is a single SetBackdrop call. Anchored -2/+2 outside f so the
+    --      border sits AROUND the frame, not inside it.
+    --   3. BOUNCE alpha animation for the pulse effect when active.
+    local hover = f:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints(f)
+    hover:SetColorTexture(1, 1, 1, 0.15)
+    f.hoverTexture = hover
+
+    local hl = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    hl:SetPoint("TOPLEFT", f, "TOPLEFT", -2, 2)
+    hl:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2, -2)
+    hl:SetFrameLevel((f:GetFrameLevel() or 1) + 5)
+    hl:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 2,
+    })
+    hl:SetBackdropBorderColor(1, 0.82, 0, 1)
+    hl:Hide()
+    f.targetHighlight = hl
+
+    local ag = hl:CreateAnimationGroup()
+    ag:SetLooping("BOUNCE")
+    local a1 = ag:CreateAnimation("Alpha")
+    a1:SetFromAlpha(1)
+    a1:SetToAlpha(0.35)
+    a1:SetDuration(0.7)
+    a1:SetSmoothing("IN_OUT")
+    hl._anim = ag
+
     f.refreshHighlight = function()
         local db = TW:GetDB()
-        if db.showHighlight == false or not f._unit then
-            setHighlight(1, 1, 1, 0); return
+        -- Hover texture: gated by master toggle + color from db.
+        if db.showHighlight == false then
+            hover:SetColorTexture(1, 1, 1, 0)  -- transparent → no visible hover
+        else
+            local hc = db.highlightHoverColor
+            if type(hc) == "table" then
+                hover:SetColorTexture(hc.r or 1, hc.g or 1, hc.b or 1, hc.a or 0.15)
+            else
+                hover:SetColorTexture(1, 1, 1, 0.15)
+            end
         end
-        applyEdgeThickness(db.highlightThickness or 2)
+        -- Target/focus border frame
+        if db.showHighlight == false or not f._unit then
+            if hl._anim then hl._anim:Stop() end
+            hl:Hide(); return
+        end
+        local thick = math.max(1, math.min(6, db.highlightThickness or 2))
+        hl:SetBackdrop({
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = thick,
+        })
         local function colorFrom(key, dr, dg, db_, da)
             local c = db[key]
             if type(c) == "table" then
@@ -525,18 +524,24 @@ local function CreateTankFrame(index)
         local isTarget, isFocus
         pcall(function() isTarget = UnitIsUnit(f._unit, "target") end)
         pcall(function() isFocus  = UnitIsUnit(f._unit, "focus")  end)
+        local r, g, b, a
         if isTarget == true then
-            setHighlight(colorFrom("highlightTargetColor", 1, 0.85, 0, 0.9))
+            r, g, b, a = colorFrom("highlightTargetColor", 1, 0.82, 0, 1)
         elseif isFocus == true then
-            setHighlight(colorFrom("highlightFocusColor", 0.3, 0.85, 1, 0.85))
-        elseif f._hover then
-            setHighlight(colorFrom("highlightHoverColor", 1, 1, 1, 0.45))
+            r, g, b, a = colorFrom("highlightFocusColor", 0.3, 0.85, 1, 1)
         else
-            setHighlight(1, 1, 1, 0)
+            if hl._anim then hl._anim:Stop() end
+            hl:Hide(); return
+        end
+        hl:SetBackdropBorderColor(r, g, b, a)
+        hl:SetAlpha(1)
+        hl:Show()
+        if db.highlightAnimate ~= false then
+            if not hl._anim:IsPlaying() then hl._anim:Play() end
+        else
+            hl._anim:Stop()
         end
     end
-    f:HookScript("OnEnter", function(self) self._hover = true; if self.refreshHighlight then self:refreshHighlight() end end)
-    f:HookScript("OnLeave", function(self) self._hover = false; if self.refreshHighlight then self:refreshHighlight() end end)
 
     return f
 end
