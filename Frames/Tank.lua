@@ -457,6 +457,58 @@ local function CreateTankFrame(index)
     deadOverlay:Hide()
     f.deadOverlay = deadOverlay
 
+    -- Selection / hover border. One texture that we tint differently:
+    -- white (faint) on mouseover, gold when this unit is the current
+    -- target, blue when it's the focus. Drawn on a dedicated host
+    -- frame above the bar layers but below the raid target icon host,
+    -- so the icon stays visible on top.
+    local hlHost = CreateFrame("Frame", nil, f)
+    hlHost:SetAllPoints(f)
+    hlHost:SetFrameLevel((f:GetFrameLevel() or 1) + 40)
+    f.highlightHost = hlHost
+    local function makeEdge(point, x1, y1, point2, x2, y2)
+        local t = hlHost:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(1, 1, 1, 1)
+        t:SetPoint(point, f, point, x1, y1)
+        if point2 then t:SetPoint(point2, f, point2, x2, y2) end
+        return t
+    end
+    -- 4 edge strips forming a 2px border around the frame.
+    local edges = {
+        makeEdge("TOPLEFT",     0, 0, "TOPRIGHT",    0, -2),  -- top
+        makeEdge("BOTTOMLEFT",  0, 2, "BOTTOMRIGHT", 0,  0),  -- bottom
+        makeEdge("TOPLEFT",     0, 0, "BOTTOMLEFT",  2,  0),  -- left
+        makeEdge("TOPRIGHT",   -2, 0, "BOTTOMRIGHT", 0,  0),  -- right
+    }
+    f.highlightEdges = edges
+    local function setHighlight(r, g, b, a)
+        for _, e in ipairs(edges) do e:SetVertexColor(r, g, b, a or 1) end
+    end
+    f.setHighlight = setHighlight
+    setHighlight(1, 1, 1, 0)  -- start hidden
+    -- Apply target / focus / hover priority on each refresh.
+    --   target  → yellow  (1, 0.85, 0)
+    --   focus   → cyan    (0.3, 0.85, 1)
+    --   hover   → white   (1, 1, 1, 0.5)
+    --   else    → hidden
+    f.refreshHighlight = function()
+        if not f._unit then setHighlight(1, 1, 1, 0); return end
+        local isTarget, isFocus
+        pcall(function() isTarget = UnitIsUnit(f._unit, "target") end)
+        pcall(function() isFocus  = UnitIsUnit(f._unit, "focus")  end)
+        if isTarget == true then
+            setHighlight(1, 0.85, 0, 0.9)
+        elseif isFocus == true then
+            setHighlight(0.3, 0.85, 1, 0.85)
+        elseif f._hover then
+            setHighlight(1, 1, 1, 0.45)
+        else
+            setHighlight(1, 1, 1, 0)
+        end
+    end
+    f:HookScript("OnEnter", function(self) self._hover = true; if self.refreshHighlight then self:refreshHighlight() end end)
+    f:HookScript("OnLeave", function(self) self._hover = false; if self.refreshHighlight then self:refreshHighlight() end end)
+
     return f
 end
 
@@ -752,6 +804,9 @@ local function UpdateFrame(f)
     -- Raid target marker (small Blizzard icon top-left of the frame)
     f._showRaidTargetIcon = db.showRaidTargetIcon ~= false
     updateRaidTargetIcon(f)
+
+    -- Selection / hover border (target = gold, focus = cyan, hover = white)
+    if f.refreshHighlight then f:refreshHighlight() end
 
     -- Death state: dim the frame + show a skull overlay so it's obvious
     -- the tank is down. Checked before anything else so the rest of the
@@ -1400,6 +1455,8 @@ ev:RegisterEvent("PLAYER_UNGHOST")
 ev:RegisterEvent("PLAYER_ALIVE")
 ev:RegisterEvent("UNIT_FLAGS")
 ev:RegisterEvent("RAID_TARGET_UPDATE")
+ev:RegisterEvent("PLAYER_TARGET_CHANGED")
+ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
 ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
@@ -1421,6 +1478,12 @@ ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
             if f and f._unit then updateRaidTargetIcon(f) end
+        end
+    elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" then
+        -- Re-evaluate the target/focus highlight ring on every frame.
+        for i = 1, MAX_TANKS do
+            local f = TW.TankFrames[i]
+            if f and f.refreshHighlight then f:refreshHighlight() end
         end
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
         or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_FLAGS"
