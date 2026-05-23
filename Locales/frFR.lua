@@ -192,6 +192,11 @@ L["Direction private aura icons stack horizontally from the anchor."] = "Directi
 L["Horizontal offset of the private aura row."] = "Décalage horizontal de la rangée d'auras privées."
 L["Vertical offset of the private aura row."] = "Décalage vertical de la rangée d'auras privées."
 L["dump private aura anchor state per tank"] = "afficher l'état d'enregistrement des ancrages d'auras privées par tank"
+L["reset only the aura settings to defaults"] = "réinitialiser uniquement les paramètres d'auras"
+L["Reset aura settings"] = "Réinitialiser les auras"
+L["Reset only the aura-related settings (size, position, filter, blacklist seed, private auras, etc.) back to defaults. Other settings stay untouched."] =
+    "Réinitialise uniquement les paramètres d'auras (taille, position, filtre, blacklist par défaut, auras privées, etc.). Le reste de la config reste intact."
+L["Aura settings reset to defaults."] = "Paramètres d'auras réinitialisés."
 L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."] =
     "Ajoute une ligne spellID en bas de l'infobulle des debuffs. Pratique pour identifier un debuff et l'ajouter à la whitelist/blacklist dans l'onglet Filtres."
 L["Only boss-cast HARMFUL auras are shown. The stack count is rendered big in the icon center."] =

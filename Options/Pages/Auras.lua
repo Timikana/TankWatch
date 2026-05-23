@@ -16,6 +16,19 @@ TW.OptPages = TW.OptPages or {}
 function TW.OptPages.buildAuras(page)
     local y = -8
 
+    -- ============ RESET ============
+    local btnReset = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnReset:SetSize(180, 22)
+    btnReset:SetPoint("TOPRIGHT", page, "TOPRIGHT", -32, y)
+    btnReset:SetText(L["Reset aura settings"])
+    btnReset:SetScript("OnClick", function()
+        if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+        if page.refreshAll then page.refreshAll() end
+        if TW._OptPanel and TW._OptPanel.refreshAll then TW._OptPanel.refreshAll() end
+    end)
+    addTooltip(btnReset, L["Reset only the aura-related settings (size, position, filter, blacklist seed, private auras, etc.) back to defaults. Other settings stay untouched."])
+    _registerInSection(btnReset)
+
     -- ============ DISPLAY ============
     makeSection(page, L["Display"], 14, y); y = y - 24
     addTooltip(makeCheck(page, L["Show Auras"], "showAuras", 14, y),

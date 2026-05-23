@@ -311,6 +311,34 @@ function TW:ResetCurrentProfile()
     seedDefaults(root.profiles[name])
 end
 
+-- Reset only the aura-related settings on the active profile back to
+-- defaults. Other settings (position, bars, text, profiles, filters'
+-- player list, raid marker, etc.) are left untouched. Useful when the
+-- user has tweaked aura layout/sizes into an unusable state.
+local AURA_KEYS = {
+    "showAuras", "aurasMaxCount", "aurasSize", "aurasSpacing",
+    "aurasAnchor", "aurasX", "aurasY", "aurasGrowX",
+    "aurasOnlyStacks", "auraFilterMode",
+    "auraWhitelist", "auraBlacklist", "_blacklistSeededV1",
+    "auraStackAnchor", "auraStackX", "auraStackY", "auraStackSize",
+    "auraTimerShow", "auraTimerAnchor", "auraTimerX", "auraTimerY", "auraTimerSize",
+    "showSpellIDInTooltip",
+    "showPrivateAuras", "privateAuraCount", "privateAuraSize", "privateAuraSpacing",
+    "privateAuraAnchor", "privateAuraGrowX", "privateAuraX", "privateAuraY",
+}
+
+function TW:ResetAuraSettings()
+    local p = TW:GetDB()
+    for _, k in ipairs(AURA_KEYS) do
+        p[k] = nil
+    end
+    seedDefaults(p)
+    if TW.RefreshAll then TW:RefreshAll() end
+    print("|cff00ff96TankWatch:|r " ..
+        (TW.L["Aura settings reset to defaults."]
+         or "Aura settings reset to defaults."))
+end
+
 -- ============================================================
 -- PROFILE SERIALIZATION (export / import)
 -- Format: "TW2!" .. base64(lua_table_literal)
@@ -578,6 +606,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintAuraDebug then TW:PrintAuraDebug() end
     elseif cmd == "paauradump" or cmd == "padump" or cmd == "pa" then
         if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
+    elseif cmd == "resetauras" or cmd == "aurasreset" then
+        if TW.ResetAuraSettings then TW:ResetAuraSettings() end
     elseif cmd == "bugreport" or cmd == "report" then
         if TW.ShowBugReport then TW:ShowBugReport() end
     else
@@ -590,6 +620,7 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
         print("  /tankw paauradump - " .. (L["dump private aura anchor state per tank"] or "dump private aura anchor state per tank"))
+        print("  /tankw resetauras - " .. (L["reset only the aura settings to defaults"] or "reset only the aura settings to defaults"))
         print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end
 end
