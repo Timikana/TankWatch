@@ -81,7 +81,7 @@ TW.Defaults = {
     showAuras = true, aurasMaxCount = 5, aurasSize = 28, aurasSpacing = 2,
     aurasAnchor = "RIGHT", aurasX = 0, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
-    auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
+    auraFilterMode  = "ALL", -- "ALL" | "WHITELIST" (BOSS deprecated, remapped to ALL)
     showSpellIDInTooltip = true, -- append spellID line to debuff tooltips
 
     -- Private auras (Midnight 12.0): boss debuffs that don't appear via
@@ -178,6 +178,14 @@ local function seedDefaults(target)
             end
         end
     end
+    -- Migration: BOSS mode no longer exists (collapsed into ALL since
+    -- beta7 — both mean "show every HARMFUL, blacklist trims noise").
+    -- Remap any saved BOSS value to ALL so the dropdown shows a valid
+    -- selection.
+    if target.auraFilterMode == "BOSS" then
+        target.auraFilterMode = "ALL"
+    end
+
     -- One-time migration: seed the default blacklist entries into
     -- existing profiles that pre-date this list. Flag stops it from
     -- re-adding entries the user has explicitly removed.

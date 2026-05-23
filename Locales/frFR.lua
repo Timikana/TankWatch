@@ -93,6 +93,9 @@ L["Filter mode"]                               = "Mode de filtre"
 L["All harmful debuffs"]                       = "Tous les debuffs nocifs"
 L["Boss-cast only"]                            = "Lancés par un boss uniquement"
 L["Whitelist only"]                            = "Whitelist uniquement"
+L["All debuffs (blacklist trims)"]             = "Tous les debuffs (la blacklist filtre)"
+L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
+    "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =
     "La whitelist affiche toujours peu importe le mode. La blacklist masque toujours."
 L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."] =

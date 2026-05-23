@@ -42,12 +42,11 @@ function TW.OptPages.buildFilters(page)
     y = y - 8
     makeSection(page, L["Debuff filters"], 14, y); y = y - 24
 
-    addTooltip(markAsNew(makeDropdown(page, L["Filter mode"], "auraFilterMode", {
-        { text = L["All harmful debuffs"],  value = "ALL" },
-        { text = L["Boss-cast only"],       value = "BOSS" },
-        { text = L["Whitelist only"],       value = "WHITELIST" },
-    }, 14, y, 220), "v1.x_filterMode"),
-        L["Which debuffs to show: every HARMFUL aura, only those cast by bosses, or only spells in your whitelist."])
+    addTooltip(makeDropdown(page, L["Filter mode"], "auraFilterMode", {
+        { text = L["All debuffs (blacklist trims)"], value = "ALL" },
+        { text = L["Whitelist only"],                value = "WHITELIST" },
+    }, 14, y, 260),
+        L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."])
     y = y - 56
 
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
