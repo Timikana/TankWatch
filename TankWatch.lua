@@ -97,8 +97,11 @@ TW.Defaults = {
     privateAuraY         = -32,      -- below the regular debuff row
 
     -- Selection / hover border (gold = target, cyan = focus, white = hover)
-    showHighlight        = true,
-    highlightThickness   = 2,
+    showHighlight         = true,
+    highlightThickness    = 2,
+    highlightTargetColor  = { r = 1,   g = 0.85, b = 0,   a = 0.9  },
+    highlightFocusColor   = { r = 0.3, g = 0.85, b = 1,   a = 0.85 },
+    highlightHoverColor   = { r = 1,   g = 1,    b = 1,   a = 0.45 },
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
     -- Default blacklist: well-known junk debuffs that match Blizzard's
     -- HARMFUL|RAID filter but aren't actually boss debuffs. User can

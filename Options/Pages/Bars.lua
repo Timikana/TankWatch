@@ -96,4 +96,11 @@ function TW.OptPages.buildBars(page)
         L["Outline the tank frame with a colored border: gold when targeted, cyan when focused, white on mouseover."])
     addTooltip(makeSlider(page, L["Border thickness"], "highlightThickness", 1, 6, 1, 260, y),
         L["Thickness of the highlight border in pixels."])
+    y = y - 56
+    addTooltip(makeColorPicker(page, L["Target color"], "highlightTargetColor", 14, y),
+        L["Border color when this tank is your current target."])
+    addTooltip(makeColorPicker(page, L["Focus color"], "highlightFocusColor", 160, y),
+        L["Border color when this tank is your focus."])
+    addTooltip(makeColorPicker(page, L["Hover color"], "highlightHoverColor", 306, y),
+        L["Border color when you mouseover this tank's frame."])
 end

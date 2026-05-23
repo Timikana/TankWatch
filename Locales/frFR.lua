@@ -110,6 +110,12 @@ L["Outline the tank frame with a colored border: gold when targeted, cyan when f
     "Entoure le cadre du tank d'une bordure colorée : or si c'est ta cible, cyan si c'est ton focus, blanc au survol."
 L["Border thickness"] = "Épaisseur de bordure"
 L["Thickness of the highlight border in pixels."] = "Épaisseur de la bordure en pixels."
+L["Target color"] = "Couleur cible"
+L["Focus color"] = "Couleur focus"
+L["Hover color"] = "Couleur survol"
+L["Border color when this tank is your current target."] = "Couleur de la bordure quand ce tank est ta cible actuelle."
+L["Border color when this tank is your focus."] = "Couleur de la bordure quand ce tank est ton focus."
+L["Border color when you mouseover this tank's frame."] = "Couleur de la bordure quand tu survoles le cadre de ce tank."
 L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
     "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =

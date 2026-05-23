@@ -515,15 +515,22 @@ local function CreateTankFrame(index)
             setHighlight(1, 1, 1, 0); return
         end
         applyEdgeThickness(db.highlightThickness or 2)
+        local function colorFrom(key, dr, dg, db_, da)
+            local c = db[key]
+            if type(c) == "table" then
+                return c.r or dr, c.g or dg, c.b or db_, c.a or da
+            end
+            return dr, dg, db_, da
+        end
         local isTarget, isFocus
         pcall(function() isTarget = UnitIsUnit(f._unit, "target") end)
         pcall(function() isFocus  = UnitIsUnit(f._unit, "focus")  end)
         if isTarget == true then
-            setHighlight(1, 0.85, 0, 0.9)
+            setHighlight(colorFrom("highlightTargetColor", 1, 0.85, 0, 0.9))
         elseif isFocus == true then
-            setHighlight(0.3, 0.85, 1, 0.85)
+            setHighlight(colorFrom("highlightFocusColor", 0.3, 0.85, 1, 0.85))
         elseif f._hover then
-            setHighlight(1, 1, 1, 0.45)
+            setHighlight(colorFrom("highlightHoverColor", 1, 1, 1, 0.45))
         else
             setHighlight(1, 1, 1, 0)
         end
