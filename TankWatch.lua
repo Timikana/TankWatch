@@ -95,6 +95,10 @@ TW.Defaults = {
     privateAuraGrowX     = "RIGHT",  -- direction icons stack
     privateAuraX         = 0,
     privateAuraY         = -32,      -- below the regular debuff row
+
+    -- Selection / hover border (gold = target, cyan = focus, white = hover)
+    showHighlight        = true,
+    highlightThickness   = 2,
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
     -- Default blacklist: well-known junk debuffs that match Blizzard's
     -- HARMFUL|RAID filter but aren't actually boss debuffs. User can

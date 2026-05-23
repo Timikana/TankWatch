@@ -104,6 +104,12 @@ L["Copy this list (Ctrl+A → Ctrl+C):"] = "Copier cette liste (Ctrl+A → Ctrl+
 L["Paste comma-separated spellIDs:"] = "Coller les spellIDs séparés par des virgules :"
 L["List is empty."] = "La liste est vide."
 L["Added %d spellIDs."] = "%d spellIDs ajoutés."
+L["Highlight (target / focus / hover)"] = "Surlignage (cible / focus / survol)"
+L["Show selection border"] = "Afficher la bordure de sélection"
+L["Outline the tank frame with a colored border: gold when targeted, cyan when focused, white on mouseover."] =
+    "Entoure le cadre du tank d'une bordure colorée : or si c'est ta cible, cyan si c'est ton focus, blanc au survol."
+L["Border thickness"] = "Épaisseur de bordure"
+L["Thickness of the highlight border in pixels."] = "Épaisseur de la bordure en pixels."
 L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
     "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =

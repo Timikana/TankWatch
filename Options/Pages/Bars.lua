@@ -88,4 +88,12 @@ function TW.OptPages.buildBars(page)
         L["How the power bar is colored: automatic by power type (rage = red, mana = blue, etc.) or a fixed custom color."])
     addTooltip(markAsNew(makeColorPicker(page, L["Power static color"], "powerStaticColor", 320, y), "v1.3_powerStaticColor"),
         L["Fixed color used when the mode above is set to 'Custom static'."])
+
+    -- ============ HIGHLIGHT (target / focus / hover) ============
+    y = y - 60
+    makeSection(page, L["Highlight (target / focus / hover)"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show selection border"], "showHighlight", 14, y), "v1.4.10_highlight"),
+        L["Outline the tank frame with a colored border: gold when targeted, cyan when focused, white on mouseover."])
+    addTooltip(makeSlider(page, L["Border thickness"], "highlightThickness", 1, 6, 1, 260, y),
+        L["Thickness of the highlight border in pixels."])
 end

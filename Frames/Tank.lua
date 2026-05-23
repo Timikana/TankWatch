@@ -473,7 +473,9 @@ local function CreateTankFrame(index)
         if point2 then t:SetPoint(point2, f, point2, x2, y2) end
         return t
     end
-    -- 4 edge strips forming a 2px border around the frame.
+    -- 4 edge strips forming a border around the frame. Thickness is
+    -- re-applied on every refreshHighlight from db.highlightThickness
+    -- so the slider takes effect without /reload.
     local edges = {
         makeEdge("TOPLEFT",     0, 0, "TOPRIGHT",    0, -2),  -- top
         makeEdge("BOTTOMLEFT",  0, 2, "BOTTOMRIGHT", 0,  0),  -- bottom
@@ -481,6 +483,22 @@ local function CreateTankFrame(index)
         makeEdge("TOPRIGHT",   -2, 0, "BOTTOMRIGHT", 0,  0),  -- right
     }
     f.highlightEdges = edges
+    local function applyEdgeThickness(t)
+        t = math.max(1, math.min(8, t or 2))
+        edges[1]:ClearAllPoints()
+        edges[1]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        edges[1]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -t)
+        edges[2]:ClearAllPoints()
+        edges[2]:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  0, t)
+        edges[2]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+        edges[3]:ClearAllPoints()
+        edges[3]:SetPoint("TOPLEFT",    f, "TOPLEFT",    0, 0)
+        edges[3]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", t, 0)
+        edges[4]:ClearAllPoints()
+        edges[4]:SetPoint("TOPRIGHT",    f, "TOPRIGHT",    -t, 0)
+        edges[4]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT",  0, 0)
+    end
+    f.applyEdgeThickness = applyEdgeThickness
     local function setHighlight(r, g, b, a)
         for _, e in ipairs(edges) do e:SetVertexColor(r, g, b, a or 1) end
     end
@@ -492,7 +510,11 @@ local function CreateTankFrame(index)
     --   hover   → white   (1, 1, 1, 0.5)
     --   else    → hidden
     f.refreshHighlight = function()
-        if not f._unit then setHighlight(1, 1, 1, 0); return end
+        local db = TW:GetDB()
+        if db.showHighlight == false or not f._unit then
+            setHighlight(1, 1, 1, 0); return
+        end
+        applyEdgeThickness(db.highlightThickness or 2)
         local isTarget, isFocus
         pcall(function() isTarget = UnitIsUnit(f._unit, "target") end)
         pcall(function() isFocus  = UnitIsUnit(f._unit, "focus")  end)
