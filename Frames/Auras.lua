@@ -116,17 +116,25 @@ function TW:HandleUnitAura(unit, updateInfo)
                 -- explicit confirmation. Default is REJECT (safer than
                 -- the previous `isHarmful = true` fallback which leaked
                 -- buffs into the cache when either check failed).
+                -- Categorize: HELPFUL first (reject), then HARMFUL (accept).
+                -- We use the truthy `if not ...` direct-check pattern from
+                -- DandersFrames (Auras.lua:1632) rather than `== true` —
+                -- IsAuraFilteredOutByInstanceID can return SECRET booleans
+                -- for secret-tagged auras, and secret == true evaluates to
+                -- false even when the underlying value is true. The truthy
+                -- check `if not secret(false) then` correctly enters the
+                -- branch because Lua sees secret(true) as a truthy value.
                 local accept = false
                 if _IsAuraFilteredOut then
-                    local isHelpful, isHarmful
-                    pcall(function()
-                        isHelpful = not _IsAuraFilteredOut(unit, instId, "HELPFUL")
-                    end)
-                    if isHelpful ~= true then
-                        pcall(function()
-                            isHarmful = not _IsAuraFilteredOut(unit, instId, "HARMFUL")
-                        end)
-                        if isHarmful == true then accept = true end
+                    local ok1, filteredHelpful = pcall(_IsAuraFilteredOut, unit, instId, "HELPFUL")
+                    if ok1 and not filteredHelpful then
+                        -- Aura matches HELPFUL → it's a buff, reject.
+                        accept = false
+                    else
+                        local ok2, filteredHarmful = pcall(_IsAuraFilteredOut, unit, instId, "HARMFUL")
+                        if ok2 and not filteredHarmful then
+                            accept = true
+                        end
                     end
                 end
                 if accept then cacheAdd(entry, aura, instId) end
