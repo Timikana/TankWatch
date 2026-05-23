@@ -175,6 +175,23 @@ L["Thick Outline"] = "Contour épais"
 L["Show Auras"]              = "Afficher les auras"
 L["Only debuffs with stacks"] = "Uniquement les debuffs avec stacks"
 L["Show spellID in tooltip"] = "Afficher le spellID dans l'infobulle"
+L["Private auras (boss-rendered)"] = "Auras privées (rendues par le boss)"
+L["Some boss debuffs in 12.0 are 'private auras' — Blizzard renders them natively and their data is invisible to addons. We register anchor frames; Blizzard paints the icon, cooldown, and stack count. Tooltip, spellID, custom font don't apply (Blizzard owns the rendering)."] =
+    "Certains debuffs de boss en 12.0 sont des « private auras » — Blizzard les rend nativement et leurs données sont invisibles aux addons. On enregistre des frames d'ancrage ; Blizzard y peint l'icône, le cooldown et le stack count. Tooltip, spellID, police custom ne s'appliquent pas (Blizzard contrôle l'affichage)."
+L["Show private auras"] = "Afficher les auras privées"
+L["Display the dedicated row for boss private auras (Blizzard-rendered icons)."] =
+    "Affiche la rangée dédiée aux auras privées de boss (icônes rendues par Blizzard)."
+L["Count"] = "Nombre"
+L["How many private aura anchor slots to register per tank. Blizzard fills them in order (slot 1 = highest priority)."] =
+    "Nombre de slots d'ancrage à enregistrer par tank. Blizzard les remplit dans l'ordre (slot 1 = priorité la plus haute)."
+L["Size of each private aura icon (Blizzard renders into a frame of this size)."] =
+    "Taille de chaque icône d'aura privée (Blizzard rend dans une frame de cette taille)."
+L["Gap between private aura icons in pixels."] = "Espace entre les icônes d'auras privées en pixels."
+L["Where the private aura row attaches on the tank frame."] = "Où la rangée d'auras privées s'ancre sur le cadre du tank."
+L["Direction private aura icons stack horizontally from the anchor."] = "Direction d'empilement horizontal des icônes d'auras privées depuis l'ancrage."
+L["Horizontal offset of the private aura row."] = "Décalage horizontal de la rangée d'auras privées."
+L["Vertical offset of the private aura row."] = "Décalage vertical de la rangée d'auras privées."
+L["dump private aura anchor state per tank"] = "afficher l'état d'enregistrement des ancrages d'auras privées par tank"
 L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."] =
     "Ajoute une ligne spellID en bas de l'infobulle des debuffs. Pratique pour identifier un debuff et l'ajouter à la whitelist/blacklist dans l'onglet Filtres."
 L["Only boss-cast HARMFUL auras are shown. The stack count is rendered big in the icon center."] =
