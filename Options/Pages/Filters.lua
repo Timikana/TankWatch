@@ -63,10 +63,13 @@ function TW.OptPages.buildFilters(page)
     -- Share buttons: export the current whitelist/blacklist as a
     -- comma-separated string for sharing on Discord/etc., or import
     -- a pasted string (additive: merges into the existing list).
+    -- Positioned BELOW the makeSpellList's own "Spell ID + Ajouter"
+    -- row (which sits at y - 18 - h - 4 — i.e. y - h - 22 — with a
+    -- ~22px-high row). Buttons go at y - h - 50 to leave a 6px gap.
     local function makeShareButtons(which, xBase, refreshFn)
         local btnExport = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
         btnExport:SetSize(70, 22)
-        btnExport:SetPoint("TOPLEFT", xBase, y - listH - 6)
+        btnExport:SetPoint("TOPLEFT", xBase, y - listH - 50)
         btnExport:SetText(L["Export"])
         addTooltip(btnExport, L["Copy this list as a comma-separated string of spellIDs to share on Discord."])
         btnExport:SetScript("OnClick", function()
