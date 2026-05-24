@@ -74,17 +74,39 @@ local function rescanFull(unit)
     local entry = cacheEntry(unit)
     wipe(entry.byID)
     wipe(entry.order)
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots
-            and C_UnitAuras.GetAuraDataBySlot) then return end
-    local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
-    if not returns[1] then return end
-    for i = 3, #returns do
-        local slot = returns[i]
-        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
-        if ok and aura then
+    -- Primary path: GetAuraSlots + GetAuraDataBySlot. Fast but in
+    -- 12.0 it occasionally returns 0 slots for secret-tagged hostile-
+    -- sourced auras even when the auras DO exist (observed in raid:
+    -- GetAuraSlots returns 0 while GetAuraDataByIndex sees 2).
+    if C_UnitAuras and C_UnitAuras.GetAuraSlots
+       and C_UnitAuras.GetAuraDataBySlot then
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
+        if returns[1] then
+            for i = 3, #returns do
+                local slot = returns[i]
+                local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+                if ok and aura then
+                    local instId
+                    pcall(function() instId = aura.auraInstanceID end)
+                    if type(instId) == "number" then
+                        cacheAdd(entry, aura, instId)
+                    end
+                end
+            end
+        end
+    end
+    -- Fallback / supplement: GetAuraDataByIndex. Always runs to catch
+    -- auras the slot enumeration missed. Dedup by auraInstanceID so
+    -- we don't double-add anything from the slot path. /tankw auradebug
+    -- showed in real raid combat that this is where the secret-tagged
+    -- boss debuffs come through when GetAuraSlots returns nothing.
+    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        for i = 1, 40 do
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+            if not ok or not aura then break end
             local instId
             pcall(function() instId = aura.auraInstanceID end)
-            if type(instId) == "number" then
+            if type(instId) == "number" and not entry.byID[instId] then
                 cacheAdd(entry, aura, instId)
             end
         end
@@ -116,18 +138,17 @@ function TW:HandleUnitAura(unit, updateInfo)
                 -- explicit confirmation. Default is REJECT (safer than
                 -- the previous `isHarmful = true` fallback which leaked
                 -- buffs into the cache when either check failed).
-                -- Single HARMFUL truthy check, no pcall — matches DF pattern
-                -- exactly (Features/Auras.lua:1632). pcall was leaking
-                -- buffs/rejecting harmful in combat when the C function
-                -- returned secret boolean values; the previous two-step
-                -- HELPFUL/HARMFUL cascade had subtle truthy/secret bugs.
-                -- Buffs are naturally filtered out: a HELPFUL aura passed
-                -- to "HARMFUL" filter returns true (= filtered out), so
-                -- `not filteredOut` is falsy and we skip. Only true
-                -- harmful auras pass. Direct call, no pcall guard.
-                if _IsAuraFilteredOut
-                   and not _IsAuraFilteredOut(unit, instId, "HARMFUL") then
-                    cacheAdd(entry, aura, instId)
+                -- Single HARMFUL truthy check. pcall'd because the C call
+                -- can throw on secret-tagged instance IDs in 12.0 — a raw
+                -- error would break this loop and skip every subsequent
+                -- aura in the payload. ok=false default rejects buffs;
+                -- a successful call returns true when filtered out (= buff
+                -- or unrelated) so `not filteredOut` is falsy and we skip.
+                if _IsAuraFilteredOut then
+                    local ok, filteredOut = pcall(_IsAuraFilteredOut, unit, instId, "HARMFUL")
+                    if ok and not filteredOut then
+                        cacheAdd(entry, aura, instId)
+                    end
                 end
             end
         end
