@@ -669,6 +669,11 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
     elseif cmd == "resetauras" or cmd == "aurasreset" then
         if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+    elseif cmd == "renderdebug" or cmd == "rd" then
+        TW._renderDebug = not TW._renderDebug
+        print("|cff00ff96TankWatch:|r renderDebug = " .. tostring(TW._renderDebug))
+        -- Force a refresh so a UpdateAuras dump prints right now
+        if TW.RefreshTanks then TW:RefreshTanks() end
     elseif cmd == "bugreport" or cmd == "report" then
         if TW.ShowBugReport then TW:ShowBugReport() end
     else

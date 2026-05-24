@@ -116,28 +116,19 @@ function TW:HandleUnitAura(unit, updateInfo)
                 -- explicit confirmation. Default is REJECT (safer than
                 -- the previous `isHarmful = true` fallback which leaked
                 -- buffs into the cache when either check failed).
-                -- Categorize: HELPFUL first (reject), then HARMFUL (accept).
-                -- We use the truthy `if not ...` direct-check pattern from
-                -- DandersFrames (Auras.lua:1632) rather than `== true` —
-                -- IsAuraFilteredOutByInstanceID can return SECRET booleans
-                -- for secret-tagged auras, and secret == true evaluates to
-                -- false even when the underlying value is true. The truthy
-                -- check `if not secret(false) then` correctly enters the
-                -- branch because Lua sees secret(true) as a truthy value.
-                local accept = false
-                if _IsAuraFilteredOut then
-                    local ok1, filteredHelpful = pcall(_IsAuraFilteredOut, unit, instId, "HELPFUL")
-                    if ok1 and not filteredHelpful then
-                        -- Aura matches HELPFUL → it's a buff, reject.
-                        accept = false
-                    else
-                        local ok2, filteredHarmful = pcall(_IsAuraFilteredOut, unit, instId, "HARMFUL")
-                        if ok2 and not filteredHarmful then
-                            accept = true
-                        end
-                    end
+                -- Single HARMFUL truthy check, no pcall — matches DF pattern
+                -- exactly (Features/Auras.lua:1632). pcall was leaking
+                -- buffs/rejecting harmful in combat when the C function
+                -- returned secret boolean values; the previous two-step
+                -- HELPFUL/HARMFUL cascade had subtle truthy/secret bugs.
+                -- Buffs are naturally filtered out: a HELPFUL aura passed
+                -- to "HARMFUL" filter returns true (= filtered out), so
+                -- `not filteredOut` is falsy and we skip. Only true
+                -- harmful auras pass. Direct call, no pcall guard.
+                if _IsAuraFilteredOut
+                   and not _IsAuraFilteredOut(unit, instId, "HARMFUL") then
+                    cacheAdd(entry, aura, instId)
                 end
-                if accept then cacheAdd(entry, aura, instId) end
             end
         end
     end
@@ -502,7 +493,13 @@ end
 function TW.UpdateAuras(frame)
     if not frame or not frame._unit then return end
     local db = TW:GetDB()
-    if not db.showAuras then return end
+    if not db.showAuras then
+        if TW._renderDebug then
+            print(string.format("|cff00ff96TW render:|r %s SKIP (showAuras=false)",
+                tostring(frame._unit)))
+        end
+        return
+    end
     local maxCount = db.aurasMaxCount or 5
     ensurePool(frame, maxCount)
 
@@ -532,6 +529,19 @@ function TW.UpdateAuras(frame)
             if #found >= maxCount then return true end
         end
     end, mode)
+
+    if TW._renderDebug then
+        print(string.format("|cff00ff96TW render:|r %s mode=%s found=%d showAuras=%s onlyStacks=%s",
+            tostring(frame._unit), tostring(mode), #found,
+            tostring(db.showAuras), tostring(db.aurasOnlyStacks)))
+        for i, a in ipairs(found) do
+            local sid, sname, stacks = "?", "?", "?"
+            pcall(function() sid    = tostring(a.spellId      or "?") end)
+            pcall(function() sname  = tostring(a.name         or "?") end)
+            pcall(function() stacks = tostring(a.applications or "?") end)
+            print(string.format("    found[%d] %s id=%s stacks=%s", i, sname, sid, stacks))
+        end
+    end
 
     for i = 1, maxCount do
         local b = frame._auras[i]
@@ -646,6 +656,14 @@ function TW.UpdateAuras(frame)
                 b._exp = nil
             end
             b:Show()
+            if TW._renderDebug then
+                local w, h = b:GetSize()
+                local point, relTo, relPoint, ox, oy = b:GetPoint(1)
+                local hasIcon = b.icon:GetTexture() ~= nil
+                print(string.format("    button[%d] shown=%s size=%dx%d point=%s offset=%d,%d icon=%s",
+                    i, tostring(b:IsShown()), w, h,
+                    tostring(point), ox or 0, oy or 0, tostring(hasIcon)))
+            end
         else
             b._exp = nil
             b:Hide()
