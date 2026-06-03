@@ -526,12 +526,67 @@ L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
 L["CHANGELOG_BODY"] = [[
 ## v1.4.10
 
-|cffffd700Corrigé|r — Debuffs de boss manquants sur les cadres de co-tanks
-- Le scan d'auras HARMFUL ratait des debuffs qui n'apparaissent que
-  sous les filtres "privés" RAID / IMPORTANT / DISPELLABLE en 12.0
-  (DandersFrames les affichait, TankWatch non). Le scanner itère
-  désormais chaque filtre pertinent et déduplique par auraInstanceID
-  — même pattern que Cell / DandersFrames.
+|cffffd700Corrigé|r — Debuffs de boss manquants sur les cadres tank / co-tank
+- En Midnight 12.0 les debuffs de boss sont souvent "secret-taggés",
+  leurs données ne sont pas lisibles en Lua. TankWatch reproduit
+  maintenant tout le pattern DandersFrames : cache event-driven
+  alimenté par UNIT_AURA (addedAuras / updatedAuraInstanceIDs /
+  removedAuraInstanceIDs), rescan double-passe (GetAuraSlots +
+  fallback GetAuraDataByIndex), catégorisation par truthy-check
+  HARMFUL, tri par expirationTime, SetCooldownFromDurationObject
+  pour le swipe secret-safe, GetAuraApplicationDisplayCount pour
+  les stacks. Icônes + cooldown + stacks s'affichent même quand
+  Blizzard scelle le nom / spellID.
+
+|cffffd700Nouveau|r — Ancres d'auras privées (icônes rendues par Blizzard)
+- Certains debuffs de boss en 12.0 sont des "private auras"
+  rendues nativement par Blizzard, invisibles au code addon. On
+  enregistre C_UnitAuras.AddPrivateAuraAnchor par slot de tank ;
+  Blizzard peint l'icône, le cooldown et le count directement dans
+  notre cadre. Nouvelle rangée dédiée sous la rangée principale,
+  configurable dans l'onglet Auras (nombre / taille / spacing /
+  ancrage / décalage).
+
+|cffffd700Nouveau|r — spellID global dans les infobulles
+- Hook TooltipDataProcessor ajoute "spellID NNNN" à toutes les
+  infobulles de sorts / auras du UI — BuffFrame, barres d'action,
+  /cast preview, raid frames, etc. Toggle dans l'onglet Auras.
+
+|cffffd700Nouveau|r — Bordure de sélection / survol sur les cadres
+- Bordure animée 2px autour de chaque cadre tank : or pour la cible,
+  cyan pour le focus, blanc au survol. Toggle d'animation pulsée
+  (BOUNCE alpha), slider d'épaisseur (1-6 px), 3 color pickers.
+  Porté de BossWatch.
+
+|cffffd700Nouveau|r — Partage granulaire whitelist / blacklist
+- Boutons Export / Import par liste (onglet Filtres) sérialisent
+  la liste de spellIDs en chaîne séparée par virgules. Facile à
+  partager sur Discord sans exporter le profil complet (TW2!).
+
+|cffffd700Nouveau|r — Blacklist par défaut seedée
+- 8 spellIDs junk connus pré-ajoutés à la blacklist (Rassasié,
+  Épuisement, Déplacement temporel, Fatigué, Insanité, etc.).
+  Migration one-time via flag _blacklistSeededV1 — les entrées que
+  tu retires restent retirées.
+
+|cffffd700Nouveau|r — Reset ciblé des auras
+- Bouton "Réinitialiser les auras" (onglet Auras) + slash
+  /tankw resetauras. Wipe uniquement les paramètres d'auras +
+  re-seed les défauts. /tankw reset (profil complet + ReloadUI)
+  reste l'option nucléaire.
+
+|cffffd700Nouveau|r — Slash commandes de diagnostic
+- /tankw auradebug : dump tous les debuffs HARMFUL par tank avec
+  spellID + stacks + classification de filtre.
+- /tankw paauradump : liste l'état d'enregistrement des ancres
+  privées par tank.
+- /tankw renderdebug : trace live de UpdateAuras.
+
+|cffffd700Corrigé|r — Dropdown de filtre simplifié
+- "Lancés par un boss uniquement" supprimé (identique à "Tous"
+  depuis le refactor beta7). Maintenant deux modes : "Tous les
+  debuffs (la blacklist filtre)" et "Whitelist uniquement".
+  Migration remappe l'ancienne valeur BOSS vers ALL.
 
 ## v1.4.9
 
