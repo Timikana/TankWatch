@@ -529,6 +529,18 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.13
+
+|cffffd700Corrigé|r — Hosts d'auras privées superposés avec debuffs normaux en combat
+- Le repositionnement des hosts (chaîne SetPoint vers le dernier
+  debuff normal visible) était gated par InCombatLockdown comme
+  les C calls Blizzard. Résultat : quand un nouveau debuff
+  apparaissait en combat, le host restait à sa position pré-combat
+  et l'icône private aura se superposait avec le nouveau debuff.
+  Split des deux opérations — SetPoint sur le host (non-secure)
+  tourne toujours ; seuls AddPrivateAuraAnchor / RemovePrivateAuraAnchor
+  (les C calls) restent deferred jusqu'à PLAYER_REGEN_ENABLED.
+
 ## v1.4.12
 
 |cffffd700Amélioré|r — Les private auras fusionnent dans la rangée principale
