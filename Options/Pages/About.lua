@@ -9,6 +9,67 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.10
+
+|cffffd700Fixed|r — Missing boss debuffs on tank / co-tank frames
+- In Midnight 12.0 boss debuffs are often "secret-tagged" so the
+  data isn't readable in Lua. TankWatch now matches DandersFrames'
+  full pattern: event-driven UNIT_AURA cache fed by addedAuras /
+  updatedAuraInstanceIDs / removedAuraInstanceIDs, dual-path
+  rescan (GetAuraSlots + GetAuraDataByIndex fallback), single
+  HARMFUL truthy-check categorization, sort by expirationTime,
+  SetCooldownFromDurationObject for secret-safe swipe,
+  GetAuraApplicationDisplayCount for stacks. Icons + cooldown +
+  stacks render even when name / spellID stay sealed by Blizzard.
+
+|cffffd700New|r — Private aura anchors (boss-rendered icons)
+- Some boss debuffs in 12.0 are "private auras" Blizzard renders
+  natively — invisible to addon Lua. We register
+  C_UnitAuras.AddPrivateAuraAnchor per tank slot; Blizzard paints
+  the icon, cooldown, and count directly into our frame. New
+  dedicated row below the main debuff row, configurable in
+  Auras tab (count / size / spacing / anchor / offset).
+
+|cffffd700New|r — Global spellID in tooltips
+- TooltipDataProcessor hook appends "spellID NNNN" to every
+  spell / aura tooltip in the UI — BuffFrame, action bars, /cast
+  preview, raid frames, etc. Toggle in Auras tab.
+
+|cffffd700New|r — Selection / hover border on tank frames
+- 2px animated border around each tank frame: gold when targeted,
+  cyan when focused, white on mouseover. Pulse animation (BOUNCE
+  alpha) toggle, thickness slider (1-6 px), 3 color pickers.
+  Ported from BossWatch.
+
+|cffffd700New|r — Granular whitelist / blacklist sharing
+- Per-list Export / Import buttons (Filtres tab) serialize the
+  current spellID list as a comma-separated string. Easy to share
+  on Discord without exporting the full profile (TW2!).
+
+|cffffd700New|r — Default junk blacklist seeded
+- 8 well-known noise spellIDs pre-added to the blacklist (Sated,
+  Exhaustion, Temporal Displacement, Fatigued, Insanity, etc.).
+  One-time migration via _blacklistSeededV1 flag — entries you
+  remove stay removed.
+
+|cffffd700New|r — Targeted aura-only reset
+- "Réinitialiser les auras" button (Auras tab) + /tankw resetauras
+  slash. Wipes only the aura-related settings + re-seeds defaults.
+  /tankw reset (full profile + ReloadUI) stays for the nuclear option.
+
+|cffffd700New|r — Diagnostic slash commands
+- /tankw auradebug : dump every HARMFUL aura per tank with spellID
+  + stacks + filter classification (RAID/RAID_IN_COMBAT/IMPORTANT).
+- /tankw paauradump : list private aura anchor registration state
+  per tank (count, host count, pending flag, config).
+- /tankw renderdebug : toggle live UpdateAuras render trace.
+
+|cffffd700Fixed|r — Filter mode dropdown simplified
+- Dropped redundant "Boss-cast only" option (was identical to
+  "All debuffs" since beta7's iteration-trust refactor). Now two
+  modes: "Tous les debuffs (la blacklist filtre)" and "Whitelist
+  uniquement". Migration remaps existing BOSS profile values to ALL.
+
 ## v1.4.9
 
 |cffffd700New|r — Right-click + raid markers on tank frames

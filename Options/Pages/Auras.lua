@@ -16,12 +16,28 @@ TW.OptPages = TW.OptPages or {}
 function TW.OptPages.buildAuras(page)
     local y = -8
 
+    -- ============ RESET ============
+    local btnReset = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    btnReset:SetSize(180, 22)
+    btnReset:SetPoint("TOPRIGHT", page, "TOPRIGHT", -32, y)
+    btnReset:SetText(L["Reset aura settings"])
+    btnReset:SetScript("OnClick", function()
+        if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+        if page.refreshAll then page.refreshAll() end
+        if TW._OptPanel and TW._OptPanel.refreshAll then TW._OptPanel.refreshAll() end
+    end)
+    addTooltip(btnReset, L["Reset only the aura-related settings (size, position, filter, blacklist seed, private auras, etc.) back to defaults. Other settings stay untouched."])
+    _registerInSection(btnReset)
+
     -- ============ DISPLAY ============
     makeSection(page, L["Display"], 14, y); y = y - 24
     addTooltip(makeCheck(page, L["Show Auras"], "showAuras", 14, y),
         L["Show the tank's boss-cast debuffs as icons on the frame."])
     addTooltip(makeCheck(page, L["Only debuffs with stacks"], "aurasOnlyStacks", 184, y),
         L["Hide debuffs that don't have a stack count (applications == 1)."])
+    y = y - 30
+    addTooltip(markAsNew(makeCheck(page, L["Show spellID in tooltip"], "showSpellIDInTooltip", 14, y), "v1.4.10_spellID"),
+        L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."])
     y = y - 30
 
     local note = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -81,4 +97,46 @@ function TW.OptPages.buildAuras(page)
         L["Horizontal offset of the timer text from its anchor."])
     addTooltip(makeSlider(page, L["Timer offset Y"], "auraTimerY", -30, 30, 1, 260, y),
         L["Vertical offset of the timer text from its anchor."])
+
+    -- ============ PRIVATE AURAS (boss debuffs rendered by Blizzard) ============
+    y = y - 60
+    makeSection(page, L["Private auras (boss-rendered)"], 14, y); y = y - 24
+
+    local paNote = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    paNote:SetPoint("TOPLEFT", 14, y)
+    paNote:SetWidth(680); paNote:SetJustifyH("LEFT")
+    paNote:SetText(L["Some boss debuffs in 12.0 are 'private auras' — Blizzard renders them natively and their data is invisible to addons. We register anchor frames; Blizzard paints the icon, cooldown, and stack count. Tooltip, spellID, custom font don't apply (Blizzard owns the rendering)."])
+    _registerInSection(paNote)
+    y = y - 48
+
+    -- Any change to these widgets triggers TW:RefreshAll() via the
+    -- widget factories' built-in refresh() hook, which chains to
+    -- RefreshTanks() → ApplyAllPrivateAuras() — the anchors auto re-
+    -- register. No manual HookScript needed.
+    addTooltip(markAsNew(makeCheck(page, L["Show private auras"], "showPrivateAuras", 14, y), "v1.4.10_privateAuras"),
+        L["Display the dedicated row for boss private auras (Blizzard-rendered icons)."])
+    y = y - 30
+
+    addTooltip(makeSlider(page, L["Count"], "privateAuraCount", 1, 8, 1, 14, y),
+        L["How many private aura anchor slots to register per tank. Blizzard fills them in order (slot 1 = highest priority)."])
+    addTooltip(makeSlider(page, L["Size"], "privateAuraSize", 12, 64, 1, 260, y),
+        L["Size of each private aura icon (Blizzard renders into a frame of this size)."])
+    y = y - 56
+
+    addTooltip(makeSlider(page, L["Spacing"], "privateAuraSpacing", 0, 12, 1, 14, y),
+        L["Gap between private aura icons in pixels."])
+    y = y - 56
+
+    addTooltip(makeDropdown(page, L["Anchor"], "privateAuraAnchor", ANCHOR9(), 14, y),
+        L["Where the private aura row attaches on the tank frame."])
+    addTooltip(makeDropdown(page, L["Grow X"], "privateAuraGrowX", {
+        { text = L["Left"],  value = "LEFT" },
+        { text = L["Right"], value = "RIGHT" },
+    }, 260, y), L["Direction private aura icons stack horizontally from the anchor."])
+    y = y - 56
+
+    addTooltip(makeSlider(page, L["Offset X"], "privateAuraX", -200, 200, 1, 14, y),
+        L["Horizontal offset of the private aura row."])
+    addTooltip(makeSlider(page, L["Offset Y"], "privateAuraY", -200, 200, 1, 260, y),
+        L["Vertical offset of the private aura row."])
 end

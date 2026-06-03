@@ -93,6 +93,34 @@ L["Filter mode"]                               = "Mode de filtre"
 L["All harmful debuffs"]                       = "Tous les debuffs nocifs"
 L["Boss-cast only"]                            = "Lancés par un boss uniquement"
 L["Whitelist only"]                            = "Whitelist uniquement"
+L["All debuffs (blacklist trims)"]             = "Tous les debuffs (la blacklist filtre)"
+L["Export"] = "Exporter"
+L["Import"] = "Importer"
+L["Copy this list as a comma-separated string of spellIDs to share on Discord."] =
+    "Copier cette liste sous forme de chaîne de spellIDs séparés par des virgules pour la partager sur Discord."
+L["Paste a comma-separated list of spellIDs to add to this list (existing entries are kept)."] =
+    "Coller une liste de spellIDs séparés par des virgules à ajouter à cette liste (les entrées existantes sont conservées)."
+L["Copy this list (Ctrl+A → Ctrl+C):"] = "Copier cette liste (Ctrl+A → Ctrl+C) :"
+L["Paste comma-separated spellIDs:"] = "Coller les spellIDs séparés par des virgules :"
+L["List is empty."] = "La liste est vide."
+L["Added %d spellIDs."] = "%d spellIDs ajoutés."
+L["Highlight (target / focus / hover)"] = "Surlignage (cible / focus / survol)"
+L["Show selection border"] = "Afficher la bordure de sélection"
+L["Outline the tank frame with a colored border: gold when targeted, cyan when focused, white on mouseover."] =
+    "Entoure le cadre du tank d'une bordure colorée : or si c'est ta cible, cyan si c'est ton focus, blanc au survol."
+L["Border thickness"] = "Épaisseur de bordure"
+L["Thickness of the highlight border in pixels."] = "Épaisseur de la bordure en pixels."
+L["Target color"] = "Couleur cible"
+L["Focus color"] = "Couleur focus"
+L["Hover color"] = "Couleur survol"
+L["Border color when this tank is your current target."] = "Couleur de la bordure quand ce tank est ta cible actuelle."
+L["Border color when this tank is your focus."] = "Couleur de la bordure quand ce tank est ton focus."
+L["Border color when you mouseover this tank's frame."] = "Couleur de la bordure quand tu survoles le cadre de ce tank."
+L["Pulse animation"] = "Pulsation animée"
+L["Pulse the target / focus border alpha (1.0 ↔ 0.35 over 0.7s, bouncing)."] =
+    "Fait pulser l'alpha de la bordure cible/focus (1.0 ↔ 0.35 sur 0.7s, aller-retour)."
+L["Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."] =
+    "Tous : affiche tous les HARMFUL sauf ceux dans la blacklist. La whitelist force l'affichage. — Whitelist : affiche uniquement les spellIDs whitelistés."
 L["Whitelist always shows regardless of mode. Blacklist always hides."] =
     "La whitelist affiche toujours peu importe le mode. La blacklist masque toujours."
 L["Whitelist forces a debuff to show even if it isn't boss-cast (e.g. M+ trash debuffs). Blacklist hides a debuff even if it is boss-cast."] =
@@ -174,6 +202,31 @@ L["Thick Outline"] = "Contour épais"
 -- Auras
 L["Show Auras"]              = "Afficher les auras"
 L["Only debuffs with stacks"] = "Uniquement les debuffs avec stacks"
+L["Show spellID in tooltip"] = "Afficher le spellID dans l'infobulle"
+L["Private auras (boss-rendered)"] = "Auras privées (rendues par le boss)"
+L["Some boss debuffs in 12.0 are 'private auras' — Blizzard renders them natively and their data is invisible to addons. We register anchor frames; Blizzard paints the icon, cooldown, and stack count. Tooltip, spellID, custom font don't apply (Blizzard owns the rendering)."] =
+    "Certains debuffs de boss en 12.0 sont des « private auras » — Blizzard les rend nativement et leurs données sont invisibles aux addons. On enregistre des frames d'ancrage ; Blizzard y peint l'icône, le cooldown et le stack count. Tooltip, spellID, police custom ne s'appliquent pas (Blizzard contrôle l'affichage)."
+L["Show private auras"] = "Afficher les auras privées"
+L["Display the dedicated row for boss private auras (Blizzard-rendered icons)."] =
+    "Affiche la rangée dédiée aux auras privées de boss (icônes rendues par Blizzard)."
+L["Count"] = "Nombre"
+L["How many private aura anchor slots to register per tank. Blizzard fills them in order (slot 1 = highest priority)."] =
+    "Nombre de slots d'ancrage à enregistrer par tank. Blizzard les remplit dans l'ordre (slot 1 = priorité la plus haute)."
+L["Size of each private aura icon (Blizzard renders into a frame of this size)."] =
+    "Taille de chaque icône d'aura privée (Blizzard rend dans une frame de cette taille)."
+L["Gap between private aura icons in pixels."] = "Espace entre les icônes d'auras privées en pixels."
+L["Where the private aura row attaches on the tank frame."] = "Où la rangée d'auras privées s'ancre sur le cadre du tank."
+L["Direction private aura icons stack horizontally from the anchor."] = "Direction d'empilement horizontal des icônes d'auras privées depuis l'ancrage."
+L["Horizontal offset of the private aura row."] = "Décalage horizontal de la rangée d'auras privées."
+L["Vertical offset of the private aura row."] = "Décalage vertical de la rangée d'auras privées."
+L["dump private aura anchor state per tank"] = "afficher l'état d'enregistrement des ancrages d'auras privées par tank"
+L["reset only the aura settings to defaults"] = "réinitialiser uniquement les paramètres d'auras"
+L["Reset aura settings"] = "Réinitialiser les auras"
+L["Reset only the aura-related settings (size, position, filter, blacklist seed, private auras, etc.) back to defaults. Other settings stay untouched."] =
+    "Réinitialise uniquement les paramètres d'auras (taille, position, filtre, blacklist par défaut, auras privées, etc.). Le reste de la config reste intact."
+L["Aura settings reset to defaults."] = "Paramètres d'auras réinitialisés."
+L["Append the spellID line at the bottom of the debuff tooltip. Useful to identify a debuff and add it to the whitelist/blacklist in the Filters tab."] =
+    "Ajoute une ligne spellID en bas de l'infobulle des debuffs. Pratique pour identifier un debuff et l'ajouter à la whitelist/blacklist dans l'onglet Filtres."
 L["Only boss-cast HARMFUL auras are shown. The stack count is rendered big in the icon center."] =
     "Seules les auras HARMFUL lancées par les boss sont affichées. Le nombre de stacks est rendu en gros au centre de l'icône."
 L["Max Count"]   = "Nombre max"
@@ -471,6 +524,70 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.10
+
+|cffffd700Corrigé|r — Debuffs de boss manquants sur les cadres tank / co-tank
+- En Midnight 12.0 les debuffs de boss sont souvent "secret-taggés",
+  leurs données ne sont pas lisibles en Lua. TankWatch reproduit
+  maintenant tout le pattern DandersFrames : cache event-driven
+  alimenté par UNIT_AURA (addedAuras / updatedAuraInstanceIDs /
+  removedAuraInstanceIDs), rescan double-passe (GetAuraSlots +
+  fallback GetAuraDataByIndex), catégorisation par truthy-check
+  HARMFUL, tri par expirationTime, SetCooldownFromDurationObject
+  pour le swipe secret-safe, GetAuraApplicationDisplayCount pour
+  les stacks. Icônes + cooldown + stacks s'affichent même quand
+  Blizzard scelle le nom / spellID.
+
+|cffffd700Nouveau|r — Ancres d'auras privées (icônes rendues par Blizzard)
+- Certains debuffs de boss en 12.0 sont des "private auras"
+  rendues nativement par Blizzard, invisibles au code addon. On
+  enregistre C_UnitAuras.AddPrivateAuraAnchor par slot de tank ;
+  Blizzard peint l'icône, le cooldown et le count directement dans
+  notre cadre. Nouvelle rangée dédiée sous la rangée principale,
+  configurable dans l'onglet Auras (nombre / taille / spacing /
+  ancrage / décalage).
+
+|cffffd700Nouveau|r — spellID global dans les infobulles
+- Hook TooltipDataProcessor ajoute "spellID NNNN" à toutes les
+  infobulles de sorts / auras du UI — BuffFrame, barres d'action,
+  /cast preview, raid frames, etc. Toggle dans l'onglet Auras.
+
+|cffffd700Nouveau|r — Bordure de sélection / survol sur les cadres
+- Bordure animée 2px autour de chaque cadre tank : or pour la cible,
+  cyan pour le focus, blanc au survol. Toggle d'animation pulsée
+  (BOUNCE alpha), slider d'épaisseur (1-6 px), 3 color pickers.
+  Porté de BossWatch.
+
+|cffffd700Nouveau|r — Partage granulaire whitelist / blacklist
+- Boutons Export / Import par liste (onglet Filtres) sérialisent
+  la liste de spellIDs en chaîne séparée par virgules. Facile à
+  partager sur Discord sans exporter le profil complet (TW2!).
+
+|cffffd700Nouveau|r — Blacklist par défaut seedée
+- 8 spellIDs junk connus pré-ajoutés à la blacklist (Rassasié,
+  Épuisement, Déplacement temporel, Fatigué, Insanité, etc.).
+  Migration one-time via flag _blacklistSeededV1 — les entrées que
+  tu retires restent retirées.
+
+|cffffd700Nouveau|r — Reset ciblé des auras
+- Bouton "Réinitialiser les auras" (onglet Auras) + slash
+  /tankw resetauras. Wipe uniquement les paramètres d'auras +
+  re-seed les défauts. /tankw reset (profil complet + ReloadUI)
+  reste l'option nucléaire.
+
+|cffffd700Nouveau|r — Slash commandes de diagnostic
+- /tankw auradebug : dump tous les debuffs HARMFUL par tank avec
+  spellID + stacks + classification de filtre.
+- /tankw paauradump : liste l'état d'enregistrement des ancres
+  privées par tank.
+- /tankw renderdebug : trace live de UpdateAuras.
+
+|cffffd700Corrigé|r — Dropdown de filtre simplifié
+- "Lancés par un boss uniquement" supprimé (identique à "Tous"
+  depuis le refactor beta7). Maintenant deux modes : "Tous les
+  debuffs (la blacklist filtre)" et "Whitelist uniquement".
+  Migration remappe l'ancienne valeur BOSS vers ALL.
+
 ## v1.4.9
 
 |cffffd700Nouveau|r — Clic droit + marqueurs de raid sur les cadres

@@ -28,8 +28,211 @@ end
 -- getStacks, the icon/timer paths). Secret-value paths are no-ops on
 -- Classic since secrets are a 12.0 concept — `isSecret` returns false
 -- when issecretvalue isn't defined.
-local function iterHarmful(unit, max, callback)
+-- DandersFrames / Cell pattern: AuraUtil.ForEachAura is the only path
+-- that accepts the specialized HARMFUL|RAID / RAID_IN_COMBAT / IMPORTANT
+-- / DISPELLABLE filter strings (C_UnitAuras.GetAuraDataByIndex ignores
+-- the pipe suffix). Some boss debuffs on friendly units in 12.0 ONLY
+-- appear under those specialized slots, never under plain "HARMFUL" —
+-- so we scan each filter, dedupe by auraInstanceID, and emit each
+-- unique aura once via the callback.
+-- DandersFrames pattern: event-driven per-unit aura cache. UNIT_AURA
+-- delivers an updateInfo payload that includes addedAuras (full
+-- auraData blob) BEFORE GetAuraSlots can be polled for them — in 12.0
+-- some auras are filtered out of slot enumeration but still ride in
+-- the event payload. We cache by auraInstanceID, populate via the
+-- event handler (TW.HandleUnitAura), and iterate the cache instead of
+-- doing a live scan.
+TW._auraCache = TW._auraCache or {}
+
+local function cacheEntry(unit)
+    if not TW._auraCache[unit] then
+        TW._auraCache[unit] = { byID = {}, order = {} }
+    end
+    return TW._auraCache[unit]
+end
+
+local function cacheAdd(entry, aura, instId)
+    if not entry.byID[instId] then
+        entry.order[#entry.order + 1] = instId
+    end
+    entry.byID[instId] = aura
+end
+
+local function cacheRemove(entry, instId)
+    if entry.byID[instId] then
+        entry.byID[instId] = nil
+        for i, oid in ipairs(entry.order) do
+            if oid == instId then table.remove(entry.order, i); break end
+        end
+    end
+end
+
+-- Full GetAuraSlots scan — used to bootstrap the cache when we don't
+-- yet have one for a unit (first-access) or when the event payload
+-- says isFullUpdate (Blizzard signal that the cache is stale).
+local function rescanFull(unit)
+    local entry = cacheEntry(unit)
+    wipe(entry.byID)
+    wipe(entry.order)
+    -- Primary path: GetAuraSlots + GetAuraDataBySlot. Fast but in
+    -- 12.0 it occasionally returns 0 slots for secret-tagged hostile-
+    -- sourced auras even when the auras DO exist (observed in raid:
+    -- GetAuraSlots returns 0 while GetAuraDataByIndex sees 2).
+    if C_UnitAuras and C_UnitAuras.GetAuraSlots
+       and C_UnitAuras.GetAuraDataBySlot then
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
+        if returns[1] then
+            for i = 3, #returns do
+                local slot = returns[i]
+                local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+                if ok and aura then
+                    local instId
+                    pcall(function() instId = aura.auraInstanceID end)
+                    if type(instId) == "number" then
+                        cacheAdd(entry, aura, instId)
+                    end
+                end
+            end
+        end
+    end
+    -- Fallback / supplement: GetAuraDataByIndex. Always runs to catch
+    -- auras the slot enumeration missed. Dedup by auraInstanceID so
+    -- we don't double-add anything from the slot path. /tankw auradebug
+    -- showed in real raid combat that this is where the secret-tagged
+    -- boss debuffs come through when GetAuraSlots returns nothing.
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        for i = 1, 40 do
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+            if not ok or not aura then break end
+            local instId
+            pcall(function() instId = aura.auraInstanceID end)
+            if type(instId) == "number" and not entry.byID[instId] then
+                cacheAdd(entry, aura, instId)
+            end
+        end
+    end
+end
+
+-- Public event handler — called from the OnEvent dispatcher in Tank.lua
+-- on every UNIT_AURA for tank-frame units. Applies the delta when
+-- updateInfo is present, full rescan otherwise.
+function TW:HandleUnitAura(unit, updateInfo)
+    if not unit then return end
+    if not updateInfo or updateInfo.isFullUpdate then
+        rescanFull(unit)
+        return
+    end
+    local entry = cacheEntry(unit)
+    if updateInfo.addedAuras then
+        for _, aura in ipairs(updateInfo.addedAuras) do
+            local instId
+            pcall(function() instId = aura.auraInstanceID end)
+            if type(instId) == "number" then
+                -- Categorize via IsAuraFilteredOutByInstanceID. The
+                -- addedAuras payload is a FLAT list mixing helpful and
+                -- harmful auras (auraData.isHarmful is secret on Midnight
+                -- per the oUF reference, so we can't read it directly).
+                -- DandersFrames pattern: test HELPFUL first — if the C
+                -- function says "not filtered out by HELPFUL", it's a
+                -- buff, REJECT. Else test HARMFUL — accept only on
+                -- explicit confirmation. Default is REJECT (safer than
+                -- the previous `isHarmful = true` fallback which leaked
+                -- buffs into the cache when either check failed).
+                -- Single HARMFUL truthy check. pcall'd because the C call
+                -- can throw on secret-tagged instance IDs in 12.0 — a raw
+                -- error would break this loop and skip every subsequent
+                -- aura in the payload. ok=false default rejects buffs;
+                -- a successful call returns true when filtered out (= buff
+                -- or unrelated) so `not filteredOut` is falsy and we skip.
+                if _IsAuraFilteredOut then
+                    local ok, filteredOut = pcall(_IsAuraFilteredOut, unit, instId, "HARMFUL")
+                    if ok and not filteredOut then
+                        cacheAdd(entry, aura, instId)
+                    end
+                end
+            end
+        end
+    end
+    if updateInfo.updatedAuraInstanceIDs then
+        for _, id in ipairs(updateInfo.updatedAuraInstanceIDs) do
+            if entry.byID[id] and C_UnitAuras
+               and C_UnitAuras.GetAuraDataByAuraInstanceID then
+                local ok, fresh = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
+                if ok and fresh then entry.byID[id] = fresh end
+            end
+        end
+    end
+    if updateInfo.removedAuraInstanceIDs then
+        for _, id in ipairs(updateInfo.removedAuraInstanceIDs) do
+            cacheRemove(entry, id)
+        end
+    end
+end
+
+-- Wipe cache for a unit (or all units when unit is nil). Called on
+-- roster changes so stale entries from old tanks don't linger.
+function TW:WipeAuraCache(unit)
+    if unit then
+        TW._auraCache[unit] = nil
+    else
+        wipe(TW._auraCache)
+    end
+end
+
+local function iterHarmful(unit, max, callback, mode)
+    -- mode is accepted for API symmetry; cache always holds HARMFUL.
+    -- Read from cache; populate via rescanFull if first access.
+    local entry = TW._auraCache[unit]
+    if not entry then
+        rescanFull(unit)
+        entry = TW._auraCache[unit]
+    end
+    if entry then
+        -- Sort by expirationTime ascending so the most urgent debuffs
+        -- (least time left) reach the renderer first. Permanent auras
+        -- (expirationTime == 0) get pushed to the end via math.huge.
+        -- DandersFrames' RebuildLegacySortedArrays equivalent.
+        local sortable = {}
+        for _, instId in ipairs(entry.order) do
+            local aura = entry.byID[instId]
+            if aura then
+                local exp
+                pcall(function() exp = aura.expirationTime end)
+                local key
+                if isSecret(exp) or type(exp) ~= "number" or exp == 0 then
+                    key = math.huge
+                else
+                    key = exp
+                end
+                sortable[#sortable + 1] = { aura = aura, key = key }
+            end
+        end
+        table.sort(sortable, function(a, b) return a.key < b.key end)
+        local emitted = 0
+        for _, item in ipairs(sortable) do
+            if callback(item.aura, -1) then return "cache" end
+            emitted = emitted + 1
+            if emitted >= max then return "cache" end
+        end
+        return "cache"
+    end
+    -- Legacy fallbacks (Classic / pre-12.0 retail) bypass the cache.
+    if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
+        local emitted = 0
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", max) }
+        if not returns[1] then return "GetAuraSlots-failed" end
+        for i = 3, #returns do
+            local slot = returns[i]
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+            if ok and aura then
+                if callback(aura, -1) then break end
+                emitted = emitted + 1
+                if emitted >= max then break end
+            end
+        end
+        return "GetAuraSlots+GetAuraDataBySlot"
+    elseif C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        -- Older retail builds without GetAuraSlots — indexed scan.
         for i = 1, max do
             local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
             if not ok or not aura then break end
@@ -78,16 +281,32 @@ local function CreateAuraButton(parent, index)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(self._testName or "Test debuff", 1, 0.4, 0.4)
             GameTooltip:AddLine("Test mode", 0.7, 0.7, 0.7)
+            local db = TW.GetDB and TW:GetDB()
+            if db and db.showSpellIDInTooltip ~= false then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("|cffaaaaaaspellID|r |cffffff009999|r (test)")
+            end
             GameTooltip:Show()
             return
         end
         local unit = self._unit
         local idx  = self._harmfulIndex
-        if unit and idx and GameTooltip.SetUnitDebuff then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local instId = self._auraInstanceID
+        if not unit then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        -- Prefer the modern secret-safe API; fall back to the legacy
+        -- index-based one when no instance ID is available.
+        if type(instId) == "number"
+           and GameTooltip.SetUnitBuffByAuraInstanceID then
+            pcall(GameTooltip.SetUnitBuffByAuraInstanceID, GameTooltip,
+                  unit, instId, "HARMFUL")
+        elseif idx and idx > 0 and GameTooltip.SetUnitDebuff then
             pcall(GameTooltip.SetUnitDebuff, GameTooltip, unit, idx)
-            GameTooltip:Show()
         end
+        -- spellID line is appended by the global TooltipDataProcessor
+        -- hook in TankWatch.lua — works for every tooltip in the UI
+        -- (BuffFrame, action bars, /cast preview, etc.), not just ours.
+        GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -244,81 +463,45 @@ local function getSpellID(aura)
     return sid
 end
 
--- DandersFrames-style boss debuff detection. Cascades through every
--- HARMFUL|* filter Blizzard ships, returns true on the first one the
--- aura passes. Single "HARMFUL|RAID" is too strict — M+/dungeon
--- debuffs are often only tagged IMPORTANT or RAID_IN_COMBAT. All checks
--- are secret-safe (the API doesn't read the secret-tagged isBossAura).
--- Returns nil if the API isn't available (Classic / older retail).
+-- DandersFrames / Cell pattern: post-scan boss debuff classification.
+-- We iterate ALL harmful auras (broad scan) and then check each one
+-- against the 5 RAID-relevant filter strings via the C function
+-- IsAuraFilteredOutByInstanceID. If ANY filter accepts the aura, it's
+-- a boss debuff. This is secret-safe — the C function doesn't read
+-- the secret-tagged isBossAura field, only the auraInstanceID (regular).
 local _IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+-- Conservative set: only Blizzard's actually-boss-related classifiers.
+-- HARMFUL|DISPELLABLE and HARMFUL|RAID_PLAYER_DISPELLABLE are NOT in
+-- the list — they match every dispellable debuff (player cooldowns
+-- like the DK "Recently Raised" 10-min Raise Ally lockout get tagged
+-- dispellable C-side and would leak in).
 local BOSS_FILTERS = {
-    "HARMFUL|RAID",
-    "HARMFUL|RAID_IN_COMBAT",
-    "HARMFUL|IMPORTANT",
-    "HARMFUL|DISPELLABLE",
-    "HARMFUL|RAID_PLAYER_DISPELLABLE",
+    "HARMFUL|RAID",            -- Blizzard's primary "show on raid frame" filter
+    "HARMFUL|RAID_IN_COMBAT",  -- combat-only raid debuffs
+    "HARMFUL|IMPORTANT",       -- M+ / dungeon importance flag
 }
-local function passesRaidFilter(unit, aura)
-    if not _IsAuraFilteredOut or not aura then return nil end
-    local instId
-    pcall(function() instId = aura.auraInstanceID end)
-    if isSecret(instId) or type(instId) ~= "number" then return nil end
-    for _, f in ipairs(BOSS_FILTERS) do
-        local notFiltered
-        pcall(function() notFiltered = not _IsAuraFilteredOut(unit, instId, f) end)
-        if notFiltered == true then return true end
-    end
-    -- None of the Blizzard boss-debuff filters claimed this aura.
-    -- Return nil (not false) so the caller can still try the legacy
-    -- isFromPlayerOrPlayerPet / sourceUnit cascade, which catches
-    -- hostile-cast auras Blizzard doesn't tag specifically.
-    return nil
-end
 
 local function passesFilter(unit, aura, db)
     if not aura then return false end
     local sid = getSpellID(aura)
 
-    -- Blacklist / whitelist only apply when spellId is a regular value
+    -- Blacklist beats everything; whitelist beats mode.
     if sid then
         if db.auraBlacklist and db.auraBlacklist[sid] then return false end
         if db.auraWhitelist and db.auraWhitelist[sid] then return true  end
     end
 
     local mode = db.auraFilterMode or "ALL"
-    if mode == "ALL"       then return true  end
     if mode == "WHITELIST" then return false end
 
-    -- BOSS mode: prefer Blizzard's own RAID filter (secret-safe).
-    local raidPass = passesRaidFilter(unit, aura)
-    if raidPass ~= nil then return raidPass end
-    -- BOSS mode: in 12.0 `isBossAura` is secret-tagged on auras whose
-    -- source is a hostile unit (the field gets sealed along with the
-    -- caster record). `isFromPlayerOrPlayerPet` is usually a regular
-    -- value but can also come back nil for some auras with no clear
-    -- attribution. Cascade through three checks, defaulting to "show"
-    -- when nothing tells us it came from us — better than missing real
-    -- boss debuffs.
-    local fromMe
-    pcall(function() fromMe = aura.isFromPlayerOrPlayerPet end)
-    if not isSecret(fromMe) and fromMe ~= nil then
-        return fromMe == false
-    end
-    -- isFromPlayerOrPlayerPet not available — try isBossAura
-    local isBoss
-    pcall(function() isBoss = aura.isBossAura end)
-    if not isSecret(isBoss) and isBoss ~= nil then
-        return isBoss == true
-    end
-    -- Both unavailable — fall back to sourceUnit. If we have one and it
-    -- isn't the player or pet, treat as hostile-cast (= keep the aura).
-    -- Permissive: when sourceUnit is also unknown/secret, let the aura
-    -- through rather than hide it.
-    local src
-    pcall(function() src = aura.sourceUnit end)
-    if not isSecret(src) and type(src) == "string" then
-        return src ~= "player" and src ~= "pet"
-    end
+    -- ALL and BOSS modes: trust the iteration. No Blizzard filter string
+    -- cleanly maps to "boss debuff only" — HARMFUL|RAID misses many real
+    -- boss mechanics (observed on Chimaerus while DandersFrames showed
+    -- them), and HARMFUL|DISPELLABLE leaks player cooldowns. The robust
+    -- approach (DandersFrames pattern: directDebuffShowAll = true by
+    -- default) is to show every HARMFUL aura and let the blacklist
+    -- handle noise. The default blacklist already covers Sated /
+    -- Exhaustion / Temporal Displacement / DK rez lockout / etc.
     return true
 end
 
@@ -331,7 +514,13 @@ end
 function TW.UpdateAuras(frame)
     if not frame or not frame._unit then return end
     local db = TW:GetDB()
-    if not db.showAuras then return end
+    if not db.showAuras then
+        if TW._renderDebug then
+            print(string.format("|cff00ff96TW render:|r %s SKIP (showAuras=false)",
+                tostring(frame._unit)))
+        end
+        return
+    end
     local maxCount = db.aurasMaxCount or 5
     ensurePool(frame, maxCount)
 
@@ -344,6 +533,7 @@ function TW.UpdateAuras(frame)
     end
 
     local found, foundIdx = {}, {}
+    local mode = db.auraFilterMode or "ALL"
     iterHarmful(frame._unit, maxCount * 4, function(aura, srcIdx)
         if passesFilter(frame._unit, aura, db) then
             -- "Only stacks > 1" filter: only applied when stacks is a
@@ -359,15 +549,36 @@ function TW.UpdateAuras(frame)
             foundIdx[#foundIdx + 1] = srcIdx
             if #found >= maxCount then return true end
         end
-    end)
+    end, mode)
+
+    if TW._renderDebug then
+        print(string.format("|cff00ff96TW render:|r %s mode=%s found=%d showAuras=%s onlyStacks=%s",
+            tostring(frame._unit), tostring(mode), #found,
+            tostring(db.showAuras), tostring(db.aurasOnlyStacks)))
+        for i, a in ipairs(found) do
+            local sid, sname, stacks = "?", "?", "?"
+            pcall(function() sid    = tostring(a.spellId      or "?") end)
+            pcall(function() sname  = tostring(a.name         or "?") end)
+            pcall(function() stacks = tostring(a.applications or "?") end)
+            print(string.format("    found[%d] %s id=%s stacks=%s", i, sname, sid, stacks))
+        end
+    end
 
     for i = 1, maxCount do
         local b = frame._auras[i]
         local aura = found[i]
         if aura then
-            -- Tooltip plumbing: remember the unit and the original HARMFUL
-            -- index so OnEnter can call GameTooltip:SetUnitDebuff(unit, idx).
-            b._unit, b._harmfulIndex, b._testMode = frame._unit, foundIdx[i], false
+            -- Tooltip plumbing: remember the unit + harmful index (legacy
+            -- API) and the auraInstanceID (modern secret-safe API). The
+            -- OnEnter handler prefers SetUnitBuffByAuraInstanceID when the
+            -- index is -1 (ForEachAura path doesn't expose it). Stash the
+            -- spellID too — OnEnter appends it to the tooltip so tanks
+            -- can read it directly and blacklist via the Filters tab.
+            local _instId, _spellId
+            pcall(function() _instId = aura.auraInstanceID end)
+            pcall(function() _spellId = aura.spellId end)
+            b._unit, b._harmfulIndex, b._auraInstanceID, b._spellId, b._testMode =
+                frame._unit, foundIdx[i], _instId, _spellId, false
             -- Icon: SetTexture accepts secret values safely (Cell pattern).
             -- Pass directly via pcall — never evaluate truthiness of a
             -- possibly-secret value (`if icon then` would taint).
@@ -384,33 +595,33 @@ function TW.UpdateAuras(frame)
             local instId
             pcall(function() instId = aura.auraInstanceID end)
 
-            -- Stacks: prefer the regular aura.applications field (non-secret
-            -- on friendly raid units, which is where TankWatch operates).
-            -- Fall back to Blizzard's secret-aware display API only if the
-            -- direct read returns secret or nil — handles edge cases where
-            -- the aura record is sealed by a hostile source.
-            local stacks = getStacks(aura)
-            if not isSecret(stacks) and type(stacks) == "number" then
-                if stacks > 1 then
-                    b.stacks:SetText(tostring(stacks))
-                else
-                    b.stacks:SetText("")
+            -- Stacks — DandersFrames pattern: always use the C API
+            -- GetAuraApplicationDisplayCount(unit, instId, min, max). It
+            -- returns the count as a string (secret-tagged if the aura
+            -- is secret-sourced) and handles every edge case C-side:
+            --   below `min` → empty string (hide)
+            --   above `max` → "*" (overflow indicator)
+            --   otherwise  → the count
+            -- SetText accepts secret strings safely. Reading
+            -- aura.applications directly was unreliable: it returns nil
+            -- or 0 on many secret-tagged auras even when there ARE
+            -- stacks, hiding legitimate stack counts.
+            b.stacks:SetText("")
+            if type(instId) == "number"
+               and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                local stackText
+                pcall(function()
+                    stackText = C_UnitAuras.GetAuraApplicationDisplayCount(
+                        frame._unit, instId, 2, 99)
+                end)
+                if stackText ~= nil then
+                    pcall(b.stacks.SetText, b.stacks, stackText)
                 end
             else
-                local stackTxt
-                if not isSecret(instId) and instId
-                   and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
-                    pcall(function()
-                        stackTxt = C_UnitAuras.GetAuraApplicationDisplayCount(
-                            frame._unit, instId, 2, 99)
-                    end)
-                end
-                if isSecret(stackTxt) then
-                    pcall(b.stacks.SetText, b.stacks, stackTxt)
-                elseif stackTxt ~= nil and stackTxt ~= "" then
-                    b.stacks:SetText(stackTxt)
-                else
-                    b.stacks:SetText("")
+                -- Pre-12.0 / Classic fallback: read applications directly.
+                local stacks = getStacks(aura)
+                if type(stacks) == "number" and stacks > 1 then
+                    b.stacks:SetText(tostring(stacks))
                 end
             end
 
@@ -421,40 +632,59 @@ function TW.UpdateAuras(frame)
             pcall(function() dur = aura.duration end)
             pcall(function() exp = aura.expirationTime end)
 
-            if not isSecret(dur) and not isSecret(exp)
-               and dur and exp and dur > 0 and exp > 0 then
-                b.cd:SetHideCountdownNumbers(true)
-                b.cd:SetCooldown(exp - dur, dur)
-                -- Live countdown: just tag the button with _exp; a single
-                -- global ticker (registered once at file load) walks every
-                -- visible button at 10 Hz and refreshes the text. Replaces
-                -- the previous per-button OnUpdate (40+ tickers for a full
-                -- raid of 8 tanks × 5 auras).
-                b._exp = exp
-                b.timer:SetText(formatTime(exp - GetTime()))
-            elseif not isSecret(instId) and instId
-                   and C_UnitAuras and C_UnitAuras.GetAuraDuration
-                   and b.cd.SetCooldownFromDurationObject then
+            -- Cooldown swipe — DandersFrames pattern: PREFER the secret-
+            -- safe SetCooldownFromDurationObject API. The Duration object
+            -- returned by GetAuraDuration handles secret-tagged duration
+            -- / expirationTime fields C-side, so the swipe renders even
+            -- on hostile-sourced auras where dur/exp are sealed. Fall
+            -- back to direct SetCooldown(start, dur) only when neither
+            -- the modern API nor a Duration object is available.
+            local cooldownSet = false
+            if type(instId) == "number"
+               and C_UnitAuras and C_UnitAuras.GetAuraDuration
+               and b.cd.SetCooldownFromDurationObject then
                 local durObj
                 local ok = pcall(function()
                     durObj = C_UnitAuras.GetAuraDuration(frame._unit, instId)
                 end)
                 if ok and durObj ~= nil and not isSecret(durObj) then
-                    b.cd:SetHideCountdownNumbers(false)
-                    b.cd:SetCooldownFromDurationObject(durObj)
-                    b.timer:SetText("")
-                    b._exp = nil
-                else
-                    b.cd:Clear()
-                    b.timer:SetText("")
-                    b._exp = nil
+                    b.cd:SetHideCountdownNumbers(true)
+                    pcall(b.cd.SetCooldownFromDurationObject, b.cd, durObj)
+                    cooldownSet = true
                 end
+            end
+            if cooldownSet then
+                -- Best-effort: read the regular dur/exp into _exp for the
+                -- live timer text. If they're secret we just leave timer
+                -- blank — the swipe is the primary visual.
+                if not isSecret(exp) and type(exp) == "number" and exp > 0 then
+                    b._exp = exp
+                    b.timer:SetText(formatTime(exp - GetTime()))
+                else
+                    b._exp = nil
+                    b.timer:SetText("")
+                end
+            elseif not isSecret(dur) and not isSecret(exp)
+                   and dur and exp and dur > 0 and exp > 0 then
+                -- Pre-12.0 / Classic fallback: regular SetCooldown.
+                b.cd:SetHideCountdownNumbers(true)
+                b.cd:SetCooldown(exp - dur, dur)
+                b._exp = exp
+                b.timer:SetText(formatTime(exp - GetTime()))
             else
                 b.cd:Clear()
                 b.timer:SetText("")
                 b._exp = nil
             end
             b:Show()
+            if TW._renderDebug then
+                local w, h = b:GetSize()
+                local point, relTo, relPoint, ox, oy = b:GetPoint(1)
+                local hasIcon = b.icon:GetTexture() ~= nil
+                print(string.format("    button[%d] shown=%s size=%dx%d point=%s offset=%d,%d icon=%s",
+                    i, tostring(b:IsShown()), w, h,
+                    tostring(point), ox or 0, oy or 0, tostring(hasIcon)))
+            end
         else
             b._exp = nil
             b:Hide()
@@ -513,6 +743,43 @@ function TW:PrintAuraDebug()
         return "ok", count
     end
 
+    -- Per-aura filter classification: dumps every HARMFUL aura on the
+    -- unit with its spellID, name, stacks, and which BOSS_FILTERS accept
+    -- it. Use this to identify a junk debuff leaking through the BOSS
+    -- filter so it can be added to the blacklist.
+    local function dumpFilters(unit)
+        if not (C_UnitAuras and C_UnitAuras.GetAuraSlots
+                and C_UnitAuras.GetAuraDataBySlot) then return end
+        local returns = { pcall(C_UnitAuras.GetAuraSlots, unit, "HARMFUL", 40) }
+        if not returns[1] then return end
+        for i = 3, #returns do
+            local slot = returns[i]
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataBySlot, unit, slot)
+            if ok and aura then
+                local sid, sname, stacks = "?", "?", "?"
+                pcall(function() sid    = tostring(aura.spellId      or "?") end)
+                pcall(function() sname  = tostring(aura.name         or "?") end)
+                pcall(function() stacks = tostring(aura.applications or "?") end)
+                local instId
+                pcall(function() instId = aura.auraInstanceID end)
+                local matches = {}
+                if type(instId) == "number" and _IsAuraFilteredOut then
+                    for _, f in ipairs(BOSS_FILTERS) do
+                        local notOut
+                        pcall(function() notOut = not _IsAuraFilteredOut(unit, instId, f) end)
+                        if notOut then
+                            matches[#matches + 1] = f:gsub("HARMFUL|", "")
+                        end
+                    end
+                end
+                local tag = (#matches > 0) and ("|cff00ff00BOSS|r " .. table.concat(matches, ","))
+                    or "|cffaaaaaa(none)|r"
+                print(string.format("      %s id=%s stacks=%s  %s",
+                    sname, sid, stacks, tag))
+            end
+        end
+    end
+
     local function scan(unit, label)
         local exists = false
         pcall(function() exists = UnitExists(unit) end)
@@ -524,6 +791,8 @@ function TW:PrintAuraDebug()
         print(string.format("    AuraUtil.ForEachAura → %s, %d auras", s1, c1))
         local s2, c2 = tryIdx(unit)
         print(string.format("    C_UnitAuras.GetAuraDataByIndex → %s, %d auras", s2, c2))
+        print("    per-aura filter match:")
+        dumpFilters(unit)
     end
 
     local TANK = TW.TankFrames or {}

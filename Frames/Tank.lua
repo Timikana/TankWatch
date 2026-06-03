@@ -457,6 +457,92 @@ local function CreateTankFrame(index)
     deadOverlay:Hide()
     f.deadOverlay = deadOverlay
 
+    -- Selection / hover border — BossWatch pattern:
+    --   1. Native HIGHLIGHT draw-layer texture for mouseover. Blizzard
+    --      auto-shows it when the frame is moused over (zero events).
+    --   2. BackdropTemplate child frame with edgeFile for target/focus.
+    --      Cleaner than 4 manually-anchored strips, and the edge thickness
+    --      is a single SetBackdrop call. Anchored -2/+2 outside f so the
+    --      border sits AROUND the frame, not inside it.
+    --   3. BOUNCE alpha animation for the pulse effect when active.
+    local hover = f:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints(f)
+    hover:SetColorTexture(1, 1, 1, 0.15)
+    f.hoverTexture = hover
+
+    local hl = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    hl:SetPoint("TOPLEFT", f, "TOPLEFT", -2, 2)
+    hl:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2, -2)
+    hl:SetFrameLevel((f:GetFrameLevel() or 1) + 5)
+    hl:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 2,
+    })
+    hl:SetBackdropBorderColor(1, 0.82, 0, 1)
+    hl:Hide()
+    f.targetHighlight = hl
+
+    local ag = hl:CreateAnimationGroup()
+    ag:SetLooping("BOUNCE")
+    local a1 = ag:CreateAnimation("Alpha")
+    a1:SetFromAlpha(1)
+    a1:SetToAlpha(0.35)
+    a1:SetDuration(0.7)
+    a1:SetSmoothing("IN_OUT")
+    hl._anim = ag
+
+    f.refreshHighlight = function()
+        local db = TW:GetDB()
+        -- Hover texture: gated by master toggle + color from db.
+        if db.showHighlight == false then
+            hover:SetColorTexture(1, 1, 1, 0)  -- transparent → no visible hover
+        else
+            local hc = db.highlightHoverColor
+            if type(hc) == "table" then
+                hover:SetColorTexture(hc.r or 1, hc.g or 1, hc.b or 1, hc.a or 0.15)
+            else
+                hover:SetColorTexture(1, 1, 1, 0.15)
+            end
+        end
+        -- Target/focus border frame
+        if db.showHighlight == false or not f._unit then
+            if hl._anim then hl._anim:Stop() end
+            hl:Hide(); return
+        end
+        local thick = math.max(1, math.min(6, db.highlightThickness or 2))
+        hl:SetBackdrop({
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = thick,
+        })
+        local function colorFrom(key, dr, dg, db_, da)
+            local c = db[key]
+            if type(c) == "table" then
+                return c.r or dr, c.g or dg, c.b or db_, c.a or da
+            end
+            return dr, dg, db_, da
+        end
+        local isTarget, isFocus
+        pcall(function() isTarget = UnitIsUnit(f._unit, "target") end)
+        pcall(function() isFocus  = UnitIsUnit(f._unit, "focus")  end)
+        local r, g, b, a
+        if isTarget == true then
+            r, g, b, a = colorFrom("highlightTargetColor", 1, 0.82, 0, 1)
+        elseif isFocus == true then
+            r, g, b, a = colorFrom("highlightFocusColor", 0.3, 0.85, 1, 1)
+        else
+            if hl._anim then hl._anim:Stop() end
+            hl:Hide(); return
+        end
+        hl:SetBackdropBorderColor(r, g, b, a)
+        hl:SetAlpha(1)
+        hl:Show()
+        if db.highlightAnimate ~= false then
+            if not hl._anim:IsPlaying() then hl._anim:Play() end
+        else
+            hl._anim:Stop()
+        end
+    end
+
     return f
 end
 
@@ -753,6 +839,9 @@ local function UpdateFrame(f)
     f._showRaidTargetIcon = db.showRaidTargetIcon ~= false
     updateRaidTargetIcon(f)
 
+    -- Selection / hover border (target = gold, focus = cyan, hover = white)
+    if f.refreshHighlight then f:refreshHighlight() end
+
     -- Death state: dim the frame + show a skull overlay so it's obvious
     -- the tank is down. Checked before anything else so the rest of the
     -- update still runs (HP bar to 0, etc.) but the visual cue dominates.
@@ -1008,6 +1097,10 @@ function TW:RefreshTanks()
         end
     end
     ApplyLayout()
+    -- Re-bind the private aura anchors for the new unit set. C_UnitAuras
+    -- private auras (Midnight 12.0+) render boss debuffs that don't show
+    -- up via GetAuraSlots — without these anchors we miss them.
+    if TW.ApplyAllPrivateAuras then TW:ApplyAllPrivateAuras() end
 end
 
 -- ============================================================
@@ -1396,12 +1489,22 @@ ev:RegisterEvent("PLAYER_UNGHOST")
 ev:RegisterEvent("PLAYER_ALIVE")
 ev:RegisterEvent("UNIT_FLAGS")
 ev:RegisterEvent("RAID_TARGET_UPDATE")
-ev:SetScript("OnEvent", function(self, event, unit)
+ev:RegisterEvent("PLAYER_TARGET_CHANGED")
+ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
+ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
     if event == "PLAYER_REGEN_ENABLED" then
         if _pendingLayout then _pendingLayout = false; ApplyLayout() end
         TW:RefreshTanks()
+        -- Flush any private-aura anchor registrations that were deferred
+        -- because we couldn't call C_UnitAuras.AddPrivateAuraAnchor mid-
+        -- combat (Blizzard rejects the API during combat lockdown).
+        if TW.FlushPendingPrivateAuras then TW:FlushPendingPrivateAuras() end
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED"
         or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        -- Wipe the per-unit aura cache so stale entries from removed
+        -- tanks (or unit-token reassignments after a roster shuffle)
+        -- don't linger. The cache repopulates on the next UNIT_AURA.
+        if TW.WipeAuraCache then TW:WipeAuraCache() end
         TW:RefreshTanks()
     elseif event == "RAID_TARGET_UPDATE" then
         -- RAID_TARGET_UPDATE has no unit arg; refresh every visible frame's marker
@@ -1410,9 +1513,22 @@ ev:SetScript("OnEvent", function(self, event, unit)
             local f = TW.TankFrames[i]
             if f and f._unit then updateRaidTargetIcon(f) end
         end
+    elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" then
+        -- Re-evaluate the target/focus highlight ring on every frame.
+        for i = 1, MAX_TANKS do
+            local f = TW.TankFrames[i]
+            if f and f.refreshHighlight then f:refreshHighlight() end
+        end
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_AURA"
         or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_FLAGS"
         or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
+        -- Feed the aura cache the event payload BEFORE refreshing
+        -- frames so the cache has up-to-date data when UpdateAuras
+        -- iterates it. The 2nd updateInfo arg is only present on
+        -- UNIT_AURA events; harmless for others (nil).
+        if event == "UNIT_AURA" and TW.HandleUnitAura then
+            TW:HandleUnitAura(unit, updateInfo)
+        end
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
             if f and f._unit then

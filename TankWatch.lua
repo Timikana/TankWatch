@@ -81,9 +81,43 @@ TW.Defaults = {
     showAuras = true, aurasMaxCount = 5, aurasSize = 28, aurasSpacing = 2,
     aurasAnchor = "RIGHT", aurasX = 0, aurasY = 0, aurasGrowX = "RIGHT",
     aurasOnlyStacks = false, -- if true, only show debuffs with applications > 1
-    auraFilterMode  = "BOSS", -- "ALL" | "BOSS" | "WHITELIST"
+    auraFilterMode  = "ALL", -- "ALL" | "WHITELIST" (BOSS deprecated, remapped to ALL)
+    showSpellIDInTooltip = true, -- append spellID line to debuff tooltips
+
+    -- Private auras (Midnight 12.0): boss debuffs that don't appear via
+    -- GetAuraSlots / UNIT_AURA payload — rendered natively by Blizzard
+    -- through a frame anchor we register. See Frames/PrivateAuras.lua.
+    showPrivateAuras     = true,
+    privateAuraCount     = 4,
+    privateAuraSize      = 28,
+    privateAuraSpacing   = 2,
+    privateAuraAnchor    = "LEFT",   -- LEFT | RIGHT
+    privateAuraGrowX     = "RIGHT",  -- direction icons stack
+    privateAuraX         = 0,
+    privateAuraY         = -32,      -- below the regular debuff row
+
+    -- Selection / hover border (BossWatch pattern: HIGHLIGHT texture for
+    -- hover, BackdropTemplate edge for target/focus, BOUNCE pulse anim)
+    showHighlight         = true,
+    highlightThickness    = 2,
+    highlightAnimate      = true,
+    highlightTargetColor  = { r = 1,    g = 0.82, b = 0,    a = 1 },
+    highlightFocusColor   = { r = 0.3,  g = 0.85, b = 1,    a = 1 },
+    highlightHoverColor   = { r = 1,    g = 1,    b = 1,    a = 0.15 },
     auraWhitelist   = {},    -- [spellID] = true  → always show (regardless of mode)
-    auraBlacklist   = {},    -- [spellID] = true  → never show
+    -- Default blacklist: well-known junk debuffs that match Blizzard's
+    -- HARMFUL|RAID filter but aren't actually boss debuffs. User can
+    -- add more via the Filters tab; clearing them via UI re-enables.
+    auraBlacklist   = {
+        [57723]  = true,  -- Exhaustion (Heroism debuff)
+        [57724]  = true,  -- Sated (Bloodlust debuff)
+        [80354]  = true,  -- Temporal Displacement (Time Warp debuff)
+        [264689] = true,  -- Fatigued (Primal Rage debuff)
+        [390435] = true,  -- Exhaustion (newer hero CD variant)
+        [95809]  = true,  -- Insanity (Ancient Hysteria pet debuff)
+        [160455] = true,  -- Sated (alt id seen on some clients)
+        [231443] = true,  -- Bombarding Wind (older)
+    },
 
     -- Stack count: small, bottom-right corner by default
     auraStackAnchor = "BOTTOMRIGHT",
@@ -152,6 +186,26 @@ local function seedDefaults(target)
                 target[k] = v
             end
         end
+    end
+    -- Migration: BOSS mode no longer exists (collapsed into ALL since
+    -- beta7 — both mean "show every HARMFUL, blacklist trims noise").
+    -- Remap any saved BOSS value to ALL so the dropdown shows a valid
+    -- selection.
+    if target.auraFilterMode == "BOSS" then
+        target.auraFilterMode = "ALL"
+    end
+
+    -- One-time migration: seed the default blacklist entries into
+    -- existing profiles that pre-date this list. Flag stops it from
+    -- re-adding entries the user has explicitly removed.
+    if not target._blacklistSeededV1 then
+        target.auraBlacklist = target.auraBlacklist or {}
+        for id in pairs(TW.Defaults.auraBlacklist or {}) do
+            if target.auraBlacklist[id] == nil then
+                target.auraBlacklist[id] = true
+            end
+        end
+        target._blacklistSeededV1 = true
     end
 end
 
@@ -272,6 +326,78 @@ function TW:ResetCurrentProfile()
     local name = TW:GetActiveProfileName()
     root.profiles[name] = {}
     seedDefaults(root.profiles[name])
+end
+
+-- Reset only the aura-related settings on the active profile back to
+-- defaults. Other settings (position, bars, text, profiles, filters'
+-- player list, raid marker, etc.) are left untouched. Useful when the
+-- user has tweaked aura layout/sizes into an unusable state.
+local AURA_KEYS = {
+    "showAuras", "aurasMaxCount", "aurasSize", "aurasSpacing",
+    "aurasAnchor", "aurasX", "aurasY", "aurasGrowX",
+    "aurasOnlyStacks", "auraFilterMode",
+    "auraWhitelist", "auraBlacklist", "_blacklistSeededV1",
+    "auraStackAnchor", "auraStackX", "auraStackY", "auraStackSize",
+    "auraTimerShow", "auraTimerAnchor", "auraTimerX", "auraTimerY", "auraTimerSize",
+    "showSpellIDInTooltip",
+    "showPrivateAuras", "privateAuraCount", "privateAuraSize", "privateAuraSpacing",
+    "privateAuraAnchor", "privateAuraGrowX", "privateAuraX", "privateAuraY",
+}
+
+function TW:ResetAuraSettings()
+    local p = TW:GetDB()
+    for _, k in ipairs(AURA_KEYS) do
+        p[k] = nil
+    end
+    seedDefaults(p)
+    if TW.RefreshAll then TW:RefreshAll() end
+    print("|cff00ff96TankWatch:|r " ..
+        (TW.L["Aura settings reset to defaults."]
+         or "Aura settings reset to defaults."))
+end
+
+-- ============================================================
+-- WHITELIST / BLACKLIST SHARING
+-- ------------------------------------------------------------
+-- Tiny serialization for sharing aura lists on Discord etc. Format
+-- is just a comma-separated string of decimal spellIDs — no prefix,
+-- no Lua serialization, no base64. Anyone can paste it from any
+-- source. `which` is either "auraWhitelist" or "auraBlacklist".
+-- ============================================================
+function TW:ExportAuraList(which)
+    local p = TW:GetDB()
+    local t = p[which]
+    if type(t) ~= "table" then return "" end
+    local ids = {}
+    for sid in pairs(t) do
+        if type(sid) == "number" then ids[#ids + 1] = sid end
+    end
+    table.sort(ids)
+    return table.concat(ids, ",")
+end
+
+-- Parse a comma/space/newline-separated list of spellIDs and ADD them
+-- to the target list (merge mode). Returns count of new entries added.
+-- If `replace` is true, the existing list is wiped first.
+function TW:ImportAuraList(which, str, replace)
+    if which ~= "auraWhitelist" and which ~= "auraBlacklist" then
+        return 0, "invalid list"
+    end
+    local p = TW:GetDB()
+    p[which] = p[which] or {}
+    if replace then
+        for k in pairs(p[which]) do p[which][k] = nil end
+    end
+    local added = 0
+    for token in tostring(str or ""):gmatch("%d+") do
+        local sid = tonumber(token)
+        if sid and sid > 0 and not p[which][sid] then
+            p[which][sid] = true
+            added = added + 1
+        end
+    end
+    if TW.RefreshAll then TW:RefreshAll() end
+    return added
 end
 
 -- ============================================================
@@ -539,6 +665,15 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintRosterDebug then TW:PrintRosterDebug() end
     elseif cmd == "auradebug" or cmd == "auras" then
         if TW.PrintAuraDebug then TW:PrintAuraDebug() end
+    elseif cmd == "paauradump" or cmd == "padump" or cmd == "pa" then
+        if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
+    elseif cmd == "resetauras" or cmd == "aurasreset" then
+        if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+    elseif cmd == "renderdebug" or cmd == "rd" then
+        TW._renderDebug = not TW._renderDebug
+        print("|cff00ff96TankWatch:|r renderDebug = " .. tostring(TW._renderDebug))
+        -- Force a refresh so a UpdateAuras dump prints right now
+        if TW.RefreshTanks then TW:RefreshTanks() end
     elseif cmd == "bugreport" or cmd == "report" then
         if TW.ShowBugReport then TW:ShowBugReport() end
     else
@@ -550,6 +685,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw reset      - " .. L["reset all settings + reload"])
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
+        print("  /tankw paauradump - " .. (L["dump private aura anchor state per tank"] or "dump private aura anchor state per tank"))
+        print("  /tankw resetauras - " .. (L["reset only the aura settings to defaults"] or "reset only the aura settings to defaults"))
         print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end
 end
@@ -782,6 +919,32 @@ init:SetScript("OnEvent", function()
     if TW.RegisterBlizzardSettings then TW:RegisterBlizzardSettings() end
     if TW.CreateMinimapButton then TW:CreateMinimapButton() end
     if TW.RegisterLDB then TW:RegisterLDB() end
+
+    -- Global spellID-in-tooltip hook. Uses TooltipDataProcessor (12.0+)
+    -- to append "spellID NNNN" to every spell / aura tooltip rendered
+    -- anywhere in the UI — BuffFrame, debuffs, action bar hover, /cast
+    -- preview, etc. Gated by db.showSpellIDInTooltip (default on). The
+    -- per-frame AddLine logic in Auras.lua is now redundant for the
+    -- real-aura case but kept for test mode (where there's no spellID
+    -- to surface via the data processor).
+    if _G.TooltipDataProcessor and _G.Enum and Enum.TooltipDataType then
+        local function appendSpellID(tt, data)
+            if not data or type(data.id) ~= "number" then return end
+            local db = TW.GetDB and TW:GetDB()
+            if not db or db.showSpellIDInTooltip == false then return end
+            tt:AddLine(" ")
+            tt:AddLine(string.format("|cffaaaaaaspellID|r |cffffff00%d|r", data.id))
+        end
+        local types = {
+            Enum.TooltipDataType.Spell,
+            Enum.TooltipDataType.UnitAura,
+        }
+        for _, t in ipairs(types) do
+            if t then
+                pcall(TooltipDataProcessor.AddTooltipPostCall, t, appendSpellID)
+            end
+        end
+    end
     print(format(TW.L["|cff00ff96TankWatch|r v%s loaded — type |cffffff00/tankw|r for options"],
         (TW.GetAddOnMetadata and TW.GetAddOnMetadata(addonName, "Version")) or "?"))
     -- Classic-era beta notice. WOW_PROJECT_ID == WOW_PROJECT_MAINLINE on

@@ -88,4 +88,22 @@ function TW.OptPages.buildBars(page)
         L["How the power bar is colored: automatic by power type (rage = red, mana = blue, etc.) or a fixed custom color."])
     addTooltip(markAsNew(makeColorPicker(page, L["Power static color"], "powerStaticColor", 320, y), "v1.3_powerStaticColor"),
         L["Fixed color used when the mode above is set to 'Custom static'."])
+
+    -- ============ HIGHLIGHT (target / focus / hover) ============
+    y = y - 60
+    makeSection(page, L["Highlight (target / focus / hover)"], 14, y); y = y - 24
+    addTooltip(markAsNew(makeCheck(page, L["Show selection border"], "showHighlight", 14, y), "v1.4.10_highlight"),
+        L["Outline the tank frame with a colored border: gold when targeted, cyan when focused, white on mouseover."])
+    addTooltip(makeSlider(page, L["Border thickness"], "highlightThickness", 1, 6, 1, 260, y),
+        L["Thickness of the highlight border in pixels."])
+    y = y - 30
+    addTooltip(makeCheck(page, L["Pulse animation"], "highlightAnimate", 14, y),
+        L["Pulse the target / focus border alpha (1.0 ↔ 0.35 over 0.7s, bouncing)."])
+    y = y - 30
+    addTooltip(makeColorPicker(page, L["Target color"], "highlightTargetColor", 14, y),
+        L["Border color when this tank is your current target."])
+    addTooltip(makeColorPicker(page, L["Focus color"], "highlightFocusColor", 160, y),
+        L["Border color when this tank is your focus."])
+    addTooltip(makeColorPicker(page, L["Hover color"], "highlightHoverColor", 306, y),
+        L["Border color when you mouseover this tank's frame."])
 end
