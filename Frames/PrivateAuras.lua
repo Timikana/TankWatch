@@ -132,6 +132,13 @@ end
 
 -- (Re-)register N private aura anchors for the unit currently bound
 -- on this frame. Idempotent: tears down old anchors first.
+--
+-- Important split: ensureHosts (SetPoint on non-secure host frames)
+-- is SAFE in combat — only the C API (AddPrivateAuraAnchor /
+-- RemovePrivateAuraAnchor) is gated. So in combat we still reposition
+-- the hosts (keeps icons aligned with the regular row when debuffs
+-- come and go) but defer the anchor (re-)registration to OOC. Blizzard
+-- keeps rendering into the existing hosts even if they move.
 local function applyAnchors(f, db)
     if not canRegister() then return end
     if not f or not f._unit then return end
@@ -140,13 +147,14 @@ local function applyAnchors(f, db)
         if f._paHosts then for _, h in ipairs(f._paHosts) do h:Hide() end end
         return
     end
+    -- Always reposition the host frames — safe in combat.
+    ensureHosts(f, db)
     if inCombat() then
         f._paPending = true
         return
     end
     f._paPending = nil
     removeAnchors(f)
-    ensureHosts(f, db)
     f._paAnchorIDs = f._paAnchorIDs or {}
     local count = db.privateAuraCount or 4
     local size  = db.privateAuraSize or 28

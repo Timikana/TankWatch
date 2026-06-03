@@ -9,6 +9,18 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.13
+
+|cffffd700Fixed|r — Private aura hosts overlapping regular debuffs in combat
+- The host frame repositioning (SetPoint chain to the last visible
+  regular debuff) was gated by InCombatLockdown alongside the
+  Blizzard C anchor API. Result: when a new regular debuff appeared
+  mid-combat, the host stayed at its pre-combat position and the
+  private aura icon overlapped the new debuff. Split the two
+  operations — host SetPoint is non-secure and always runs; only
+  AddPrivateAuraAnchor / RemovePrivateAuraAnchor (the C calls) stay
+  deferred to PLAYER_REGEN_ENABLED.
+
 ## v1.4.12
 
 |cffffd700Improved|r — Private auras now merge into the regular debuff row
