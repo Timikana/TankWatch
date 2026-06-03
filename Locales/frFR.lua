@@ -524,6 +524,20 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.11
+
+|cffffd700Corrigé|r — Les debuffs secret-taggés passent enfin dans la cache + rendu
+- v1.4.10 utilisait un check strict `type(instId) == "number"` à quatre
+  endroits de la pipeline (rescanFull slot, rescanFull index fallback,
+  HandleUnitAura addedAuras, gates des appels API au rendu). En 12.0
+  certains debuffs de boss arrivent avec un auraInstanceID secret-
+  taggé — le check les rejetait partout, alors que les APIs secret-
+  safe (SetUnitBuffByAuraInstanceID, GetAuraDuration,
+  GetAuraApplicationDisplayCount) digèrent les IDs secrets nativement.
+  Chaque gate passe maintenant `instId ~= nil`. Icônes + cooldown +
+  stacks + tooltip s'affichent pour les debuffs secrets comme pour
+  les readable.
+
 ## v1.4.10
 
 |cffffd700Corrigé|r — Debuffs de boss manquants sur les cadres tank / co-tank

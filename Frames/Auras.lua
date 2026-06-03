@@ -88,7 +88,14 @@ local function rescanFull(unit)
                 if ok and aura then
                     local instId
                     pcall(function() instId = aura.auraInstanceID end)
-                    if type(instId) == "number" then
+                    -- Accept any non-nil instId including secret-tagged
+                    -- numbers. The render path consumes instId only via
+                    -- secret-safe C functions (SetUnitBuffByAuraInstanceID,
+                    -- GetAuraDuration, GetAuraApplicationDisplayCount)
+                    -- which digest secrets natively. A strict
+                    -- type=="number" check rejected boss debuffs whose
+                    -- auraInstanceID got sealed by Blizzard in 12.0.
+                    if instId ~= nil then
                         cacheAdd(entry, aura, instId)
                     end
                 end
@@ -106,7 +113,13 @@ local function rescanFull(unit)
             if not ok or not aura then break end
             local instId
             pcall(function() instId = aura.auraInstanceID end)
-            if type(instId) == "number" and not entry.byID[instId] then
+            -- Same secret-instId tolerance as the slot path above.
+            -- Dedup attempts entry.byID[instId] — if instId is secret,
+            -- the lookup will miss (secret keys aren't reusable across
+            -- queries) so we may double-add. cacheAdd checks duplicates
+            -- by instId equality anyway, so the worst case is a single
+            -- extra entry per secret aura, harmless for rendering.
+            if instId ~= nil and not entry.byID[instId] then
                 cacheAdd(entry, aura, instId)
             end
         end
@@ -127,7 +140,8 @@ function TW:HandleUnitAura(unit, updateInfo)
         for _, aura in ipairs(updateInfo.addedAuras) do
             local instId
             pcall(function() instId = aura.auraInstanceID end)
-            if type(instId) == "number" then
+            -- Accept any non-nil instId (secret-tagged included).
+            if instId ~= nil then
                 -- Categorize via IsAuraFilteredOutByInstanceID. The
                 -- addedAuras payload is a FLAT list mixing helpful and
                 -- harmful auras (auraData.isHarmful is secret on Midnight
@@ -296,7 +310,7 @@ local function CreateAuraButton(parent, index)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         -- Prefer the modern secret-safe API; fall back to the legacy
         -- index-based one when no instance ID is available.
-        if type(instId) == "number"
+        if instId ~= nil
            and GameTooltip.SetUnitBuffByAuraInstanceID then
             pcall(GameTooltip.SetUnitBuffByAuraInstanceID, GameTooltip,
                   unit, instId, "HARMFUL")
@@ -607,7 +621,7 @@ function TW.UpdateAuras(frame)
             -- or 0 on many secret-tagged auras even when there ARE
             -- stacks, hiding legitimate stack counts.
             b.stacks:SetText("")
-            if type(instId) == "number"
+            if instId ~= nil
                and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
                 local stackText
                 pcall(function()
@@ -640,7 +654,7 @@ function TW.UpdateAuras(frame)
             -- back to direct SetCooldown(start, dur) only when neither
             -- the modern API nor a Duration object is available.
             local cooldownSet = false
-            if type(instId) == "number"
+            if instId ~= nil
                and C_UnitAuras and C_UnitAuras.GetAuraDuration
                and b.cd.SetCooldownFromDurationObject then
                 local durObj
