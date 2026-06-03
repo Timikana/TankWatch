@@ -87,14 +87,10 @@ TW.Defaults = {
     -- Private auras (Midnight 12.0): boss debuffs that don't appear via
     -- GetAuraSlots / UNIT_AURA payload — rendered natively by Blizzard
     -- through a frame anchor we register. See Frames/PrivateAuras.lua.
+    -- All geometry now inherits from the regular auras* keys above —
+    -- only the on/off toggle and the slot count remain private-specific.
     showPrivateAuras     = true,
-    privateAuraCount     = 4,
-    privateAuraSize      = 28,
-    privateAuraSpacing   = 2,
-    privateAuraAnchor    = "LEFT",   -- LEFT | RIGHT
-    privateAuraGrowX     = "RIGHT",  -- direction icons stack
-    privateAuraX         = 0,
-    privateAuraY         = -32,      -- below the regular debuff row
+    privateAuraCount     = 6,
 
     -- Selection / hover border (BossWatch pattern: HIGHLIGHT texture for
     -- hover, BackdropTemplate edge for target/focus, BOUNCE pulse anim)
@@ -340,8 +336,10 @@ local AURA_KEYS = {
     "auraStackAnchor", "auraStackX", "auraStackY", "auraStackSize",
     "auraTimerShow", "auraTimerAnchor", "auraTimerX", "auraTimerY", "auraTimerSize",
     "showSpellIDInTooltip",
-    "showPrivateAuras", "privateAuraCount", "privateAuraSize", "privateAuraSpacing",
-    "privateAuraAnchor", "privateAuraGrowX", "privateAuraX", "privateAuraY",
+    "showPrivateAuras", "privateAuraCount",
+    -- Legacy private aura keys (geometry now inherits from regular auras*):
+    "privateAuraSize", "privateAuraSpacing", "privateAuraAnchor",
+    "privateAuraGrowX", "privateAuraX", "privateAuraY",
 }
 
 function TW:ResetAuraSettings()

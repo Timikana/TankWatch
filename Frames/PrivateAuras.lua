@@ -38,12 +38,29 @@ end
 -- the private aura texture / cooldown / count INTO each host.
 local function ensureHosts(f, db)
     f._paHosts = f._paHosts or {}
-    local count   = db.privateAuraCount or 4
-    local size    = db.privateAuraSize or 28
-    local spacing = db.privateAuraSpacing or 2
-    local anchor  = db.privateAuraAnchor or "LEFT"
-    local grow    = db.privateAuraGrowX or "RIGHT"
-    local ox, oy  = db.privateAuraX or 0, db.privateAuraY or -32
+    -- Inherit ALL geometry from the regular Auras section. Private auras
+    -- are conceptually just debuffs the user can't see the data for —
+    -- they should look indistinguishable from regular ones in the row.
+    -- The `privateAuraCount` knob stays as the only private-specific
+    -- option (Blizzard fills slots in priority order, so a separate
+    -- count limit makes sense).
+    local count   = db.privateAuraCount or 6
+    local size    = db.aurasSize or 28
+    local spacing = db.aurasSpacing or 2
+    local anchor  = db.aurasAnchor or "RIGHT"
+    local grow    = db.aurasGrowX or "RIGHT"
+    local ox, oy  = db.aurasX or 0, db.aurasY or 0
+
+    -- Inline-with-regular-debuffs mode: if the tank frame has visible
+    -- regular debuff icons (tracked via f._visibleAuraCount, set by
+    -- TW.UpdateAuras after rendering), anchor the first private aura
+    -- host to the RIGHT of the last visible debuff icon instead of
+    -- the user-configured anchor. Creates the illusion of a single
+    -- continuous row mixing normal + private auras.
+    local lastVisible
+    if f._auras and f._visibleAuraCount and f._visibleAuraCount > 0 then
+        lastVisible = f._auras[f._visibleAuraCount]
+    end
 
     for i = 1, count do
         local h = f._paHosts[i]
@@ -54,7 +71,21 @@ local function ensureHosts(f, db)
         h:SetSize(size, size)
         h:ClearAllPoints()
         if i == 1 then
-            h:SetPoint(anchor, f, anchor, ox, oy)
+            if lastVisible then
+                -- Inline continuation: attach to the last regular
+                -- debuff icon, growing in the regular row direction.
+                local regularGrow = (db.aurasGrowX or "RIGHT")
+                local regularSpacing = (db.aurasSpacing or 2)
+                if regularGrow == "LEFT" then
+                    h:SetPoint("RIGHT", lastVisible, "LEFT", -regularSpacing, 0)
+                else
+                    h:SetPoint("LEFT", lastVisible, "RIGHT", regularSpacing, 0)
+                end
+            else
+                -- No regular debuff visible — fall back to the
+                -- standalone anchor.
+                h:SetPoint(anchor, f, anchor, ox, oy)
+            end
         else
             local prev = f._paHosts[i - 1]
             local side = (grow == "LEFT") and "LEFT" or "RIGHT"

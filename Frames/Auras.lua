@@ -382,7 +382,17 @@ local function ensurePool(frame, count)
     -- NumberFontNormal — re-apply the configured font so they match the
     -- existing ones. Happens on first combat when the pool grows past
     -- whatever ApplyFonts saw at PLAYER_LOGIN.
-    if created and TW.ApplyFonts then TW:ApplyFonts() end
+    if created then
+        if TW.ApplyFonts then TW:ApplyFonts() end
+        -- Newly created buttons have no anchor — without an immediate
+        -- LayoutAuras pass they fall back to the parent's top-left and
+        -- appear in the wrong corner. ApplyLayout (which usually calls
+        -- LayoutAuras) is gated by combat lockdown, so when the pool
+        -- grows mid-combat the new buttons stay unanchored. Force a
+        -- layout pass right here — LayoutAuras only touches the
+        -- non-secure aura button frames, so it's safe in combat.
+        if TW.LayoutAuras then TW.LayoutAuras(frame, TW:GetDB()) end
+    end
 end
 
 local function formatTime(s)
@@ -430,8 +440,20 @@ function TW.LayoutAuras(frame, db)
     local spacing = db.aurasSpacing or 2
     local growX = db.aurasGrowX or "RIGHT"
     local anchor = db.aurasAnchor or "RIGHT"
-    local relPoint = (anchor == "LEFT") and "RIGHT" or
-                     (anchor == "RIGHT") and "LEFT" or anchor
+    -- relPoint mirrors `anchor` so the icon sits OUTSIDE the frame on
+    -- the chosen side, not overlapping it. RIGHT->LEFT, LEFT->RIGHT,
+    -- TOP->BOTTOM, BOTTOM->TOP, corners flip LEFT<->RIGHT (vertical
+    -- component preserved so the row stays aligned with the chosen
+    -- corner). CENTER stays CENTER.
+    local function mirrorAnchor(a)
+        if a == "CENTER" then return "CENTER" end
+        if a == "TOP" then return "BOTTOM" end
+        if a == "BOTTOM" then return "TOP" end
+        if a:find("LEFT") then return (a:gsub("LEFT", "RIGHT")) end
+        if a:find("RIGHT") then return (a:gsub("RIGHT", "LEFT")) end
+        return a
+    end
+    local relPoint = mirrorAnchor(anchor)
 
     -- Compact mode: glue the first icon to the right of the class icon
     -- (or to the left of the frame if no icon), forcing growX = RIGHT.
@@ -578,6 +600,7 @@ function TW.UpdateAuras(frame)
         end
     end
 
+    frame._visibleAuraCount = 0  -- reset; render loop updates as it shows
     for i = 1, maxCount do
         local b = frame._auras[i]
         local aura = found[i]
@@ -691,6 +714,7 @@ function TW.UpdateAuras(frame)
                 b._exp = nil
             end
             b:Show()
+            frame._visibleAuraCount = i  -- track last visible index
             if TW._renderDebug then
                 local w, h = b:GetSize()
                 local point, relTo, relPoint, ox, oy = b:GetPoint(1)
@@ -704,6 +728,12 @@ function TW.UpdateAuras(frame)
             b:Hide()
         end
     end
+
+    -- Re-anchor private aura hosts so they sit immediately to the right
+    -- of the last visible regular debuff icon (inline-row mode). When
+    -- the visible debuff count changes (debuff applied / expired) the
+    -- private aura row shifts to keep the layout continuous.
+    if TW.ApplyPrivateAuras then TW:ApplyPrivateAuras(frame) end
 end
 
 -- ============================================================
