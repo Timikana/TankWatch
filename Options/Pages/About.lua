@@ -9,6 +9,19 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.11
+
+|cffffd700Fixed|r — Secret-tagged debuffs now reach the cache + render
+- v1.4.10 used a strict `type(instId) == "number"` check at four
+  pipeline gates (rescanFull slot path, rescanFull index fallback,
+  HandleUnitAura addedAuras, render-side API calls). In 12.0 some
+  boss debuffs come with a secret-tagged auraInstanceID — the type
+  check rejected them everywhere, even though the secret-safe APIs
+  (SetUnitBuffByAuraInstanceID, GetAuraDuration,
+  GetAuraApplicationDisplayCount) digest secret IDs natively.
+  Relaxed every gate to `instId ~= nil`. Icons + cooldown + stacks
+  + tooltip now render for secret debuffs identical to readable ones.
+
 ## v1.4.10
 
 |cffffd700Fixed|r — Missing boss debuffs on tank / co-tank frames
