@@ -98,45 +98,25 @@ function TW.OptPages.buildAuras(page)
     addTooltip(makeSlider(page, L["Timer offset Y"], "auraTimerY", -30, 30, 1, 260, y),
         L["Vertical offset of the timer text from its anchor."])
 
-    -- ============ PRIVATE AURAS (boss debuffs rendered by Blizzard) ============
+    -- ============ PRIVATE AURAS (merged into the row) ============
+    -- Private auras share ALL geometry with the regular debuff row above
+    -- (size, spacing, anchor, growX, offsets). Only the count + on/off
+    -- toggle remain as private-specific knobs — Blizzard caps the number
+    -- of private aura slots per unit so we expose it.
     y = y - 60
-    makeSection(page, L["Private auras (boss-rendered)"], 14, y); y = y - 24
+    makeSection(page, L["Auras privées (rendues par le boss)"], 14, y); y = y - 24
 
     local paNote = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     paNote:SetPoint("TOPLEFT", 14, y)
     paNote:SetWidth(680); paNote:SetJustifyH("LEFT")
-    paNote:SetText(L["Some boss debuffs in 12.0 are 'private auras' — Blizzard renders them natively and their data is invisible to addons. We register anchor frames; Blizzard paints the icon, cooldown, and stack count. Tooltip, spellID, custom font don't apply (Blizzard owns the rendering)."])
+    paNote:SetText(L["Les private auras s'intègrent à la suite de la rangée principale ci-dessus (même taille, espacement, ancrage). Blizzard contrôle le rendu (tooltip, spellID, police custom ne s'appliquent pas)."])
     _registerInSection(paNote)
-    y = y - 48
+    y = y - 40
 
-    -- Any change to these widgets triggers TW:RefreshAll() via the
-    -- widget factories' built-in refresh() hook, which chains to
-    -- RefreshTanks() → ApplyAllPrivateAuras() — the anchors auto re-
-    -- register. No manual HookScript needed.
-    addTooltip(markAsNew(makeCheck(page, L["Show private auras"], "showPrivateAuras", 14, y), "v1.4.10_privateAuras"),
-        L["Display the dedicated row for boss private auras (Blizzard-rendered icons)."])
+    addTooltip(makeCheck(page, L["Show private auras"], "showPrivateAuras", 14, y),
+        L["Register private aura anchor slots on each tank frame. Disable if you only want the regular Lua-scanned debuffs."])
     y = y - 30
 
     addTooltip(makeSlider(page, L["Count"], "privateAuraCount", 1, 8, 1, 14, y),
         L["How many private aura anchor slots to register per tank. Blizzard fills them in order (slot 1 = highest priority)."])
-    addTooltip(makeSlider(page, L["Size"], "privateAuraSize", 12, 64, 1, 260, y),
-        L["Size of each private aura icon (Blizzard renders into a frame of this size)."])
-    y = y - 56
-
-    addTooltip(makeSlider(page, L["Spacing"], "privateAuraSpacing", 0, 12, 1, 14, y),
-        L["Gap between private aura icons in pixels."])
-    y = y - 56
-
-    addTooltip(makeDropdown(page, L["Anchor"], "privateAuraAnchor", ANCHOR9(), 14, y),
-        L["Where the private aura row attaches on the tank frame."])
-    addTooltip(makeDropdown(page, L["Grow X"], "privateAuraGrowX", {
-        { text = L["Left"],  value = "LEFT" },
-        { text = L["Right"], value = "RIGHT" },
-    }, 260, y), L["Direction private aura icons stack horizontally from the anchor."])
-    y = y - 56
-
-    addTooltip(makeSlider(page, L["Offset X"], "privateAuraX", -200, 200, 1, 14, y),
-        L["Horizontal offset of the private aura row."])
-    addTooltip(makeSlider(page, L["Offset Y"], "privateAuraY", -200, 200, 1, 260, y),
-        L["Vertical offset of the private aura row."])
 end

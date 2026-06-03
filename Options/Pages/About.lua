@@ -9,6 +9,36 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.12
+
+|cffffd700Improved|r — Private auras now merge into the regular debuff row
+- Boss debuffs rendered by Blizzard (private auras) now flow inline
+  with the regular Lua-scanned debuff icons in a single horizontal
+  row. They share ALL geometry settings (size, spacing, anchor,
+  growX, offsets) with the regular row — set everything once in
+  Auras > Icônes and both categories follow.
+- Removed the separate "Auras privées" section's geometry sliders;
+  only the on/off toggle and the slot count (1-8) remain.
+- Visually: one continuous row mixing addon-rendered + Blizzard-
+  rendered icons. User no longer has to think about which is which.
+
+|cffffd700Fixed|r — Aura icons stuck at top-left after pool grows in combat
+- When a tank gained more debuffs than the pool had buttons for,
+  ensurePool created the new buttons but ApplyLayout (which
+  positions them) was gated by combat lockdown. New buttons stayed
+  unanchored → fell back to the parent's TOPLEFT corner. ensurePool
+  now triggers a LayoutAuras pass immediately after creating new
+  buttons (safe in combat — only non-secure aura buttons are
+  re-anchored).
+
+|cffffd700Fixed|r — Anchor mirror logic for corner anchors
+- LayoutAuras's relPoint mapping only handled LEFT↔RIGHT. Setting
+  anchor=TOPRIGHT, TOPLEFT, BOTTOMRIGHT, BOTTOMLEFT placed icons
+  INSIDE the frame at the corresponding corner instead of OUTSIDE.
+  Generalized to a mirror function that flips the LEFT/RIGHT
+  component of any anchor, so corners now place icons outside the
+  frame following the chosen side.
+
 ## v1.4.11
 
 |cffffd700Fixed|r — Secret-tagged debuffs now reach the cache + render

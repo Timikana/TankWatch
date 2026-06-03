@@ -204,6 +204,11 @@ L["Show Auras"]              = "Afficher les auras"
 L["Only debuffs with stacks"] = "Uniquement les debuffs avec stacks"
 L["Show spellID in tooltip"] = "Afficher le spellID dans l'infobulle"
 L["Private auras (boss-rendered)"] = "Auras privées (rendues par le boss)"
+L["Auras privées (rendues par le boss)"] = "Auras privées (rendues par le boss)"
+L["Les private auras s'intègrent à la suite de la rangée principale ci-dessus (même taille, espacement, ancrage). Blizzard contrôle le rendu (tooltip, spellID, police custom ne s'appliquent pas)."] =
+    "Les private auras s'intègrent à la suite de la rangée principale ci-dessus (même taille, espacement, ancrage). Blizzard contrôle le rendu (tooltip, spellID, police custom ne s'appliquent pas)."
+L["Register private aura anchor slots on each tank frame. Disable if you only want the regular Lua-scanned debuffs."] =
+    "Enregistre les emplacements d'ancrage d'auras privées sur chaque cadre de tank. Désactiver si tu veux uniquement les debuffs scannés en Lua."
 L["Some boss debuffs in 12.0 are 'private auras' — Blizzard renders them natively and their data is invisible to addons. We register anchor frames; Blizzard paints the icon, cooldown, and stack count. Tooltip, spellID, custom font don't apply (Blizzard owns the rendering)."] =
     "Certains debuffs de boss en 12.0 sont des « private auras » — Blizzard les rend nativement et leurs données sont invisibles aux addons. On enregistre des frames d'ancrage ; Blizzard y peint l'icône, le cooldown et le stack count. Tooltip, spellID, police custom ne s'appliquent pas (Blizzard contrôle l'affichage)."
 L["Show private auras"] = "Afficher les auras privées"
@@ -524,6 +529,37 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.12
+
+|cffffd700Amélioré|r — Les private auras fusionnent dans la rangée principale
+- Les debuffs de boss rendus par Blizzard (private auras) s'enchaînent
+  désormais en ligne avec les icônes de debuffs scannées en Lua,
+  dans une seule rangée horizontale. Toute la géométrie est partagée
+  (taille, espacement, ancrage, sens, décalages) — règle une fois
+  dans Auras > Icônes et les deux catégories suivent.
+- Section "Auras privées" simplifiée : suppression des sliders de
+  géométrie en double. Reste juste le toggle ON/OFF + le nombre
+  de slots (1-8).
+- Visuel : une rangée continue mixant icônes addon + icônes Blizzard.
+  Plus besoin de te demander laquelle est laquelle.
+
+|cffffd700Corrigé|r — Icônes coincées en haut-gauche après croissance du pool en combat
+- Quand un tank gagnait plus de debuffs que le pool n'avait de
+  boutons, ensurePool créait les nouveaux boutons mais ApplyLayout
+  (qui les positionne) était bloqué par le combat lockdown. Les
+  nouveaux boutons restaient sans ancrage → tombaient au TOPLEFT
+  du parent par défaut. ensurePool déclenche maintenant un
+  LayoutAuras immédiat après création (safe en combat — seuls les
+  boutons aura non-secure sont re-ancrés).
+
+|cffffd700Corrigé|r — Logique miroir d'ancrage pour les coins
+- Le mapping relPoint dans LayoutAuras ne gérait que LEFT↔RIGHT.
+  Choisir anchor=TOPRIGHT, TOPLEFT, BOTTOMRIGHT, BOTTOMLEFT plaçait
+  les icônes À L'INTÉRIEUR du cadre au coin correspondant au lieu
+  d'À L'EXTÉRIEUR. Généralisé en une fonction miroir qui inverse
+  la composante LEFT/RIGHT de n'importe quel ancrage, donc les
+  coins placent maintenant les icônes hors du cadre du bon côté.
+
 ## v1.4.11
 
 |cffffd700Corrigé|r — Les debuffs secret-taggés passent enfin dans la cache + rendu
