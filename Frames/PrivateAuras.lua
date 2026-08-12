@@ -62,10 +62,38 @@ local function ensureHosts(f, db)
         lastVisible = f._auras[f._visibleAuraCount]
     end
 
+    -- Fake icon textures for /tankw test N — distinguishable from the
+    -- regular test debuff set so the user can tell which slot is which.
+    -- Real combat hides these (Blizzard paints the actual aura icon).
+    local TEST_PA_ICONS = {
+        135725,  -- Spell_Shadow_AntiShadow
+        237565,  -- Achievement_Dungeon_Ulduar80_25man
+        237579,  -- Spell_Shadow_RaiseDead
+        135730,  -- Spell_Shadow_AbominationExplosion
+        237554,  -- Spell_Shadow_Charm
+        135815,  -- Spell_Shadow_DeathPact
+        135774,  -- Spell_Shadow_PsychicScream
+        237568,  -- Spell_Shadow_Possession
+    }
+
     for i = 1, count do
         local h = f._paHosts[i]
         if not h then
             h = CreateFrame("Frame", nil, f)
+            -- Test-mode fake icon: ARTWORK layer so it sits above the
+            -- frame background but below Blizzard's private aura paint
+            -- if it ever lands (won't happen in test mode — no unit).
+            local ti = h:CreateTexture(nil, "ARTWORK")
+            ti:SetAllPoints(h)
+            ti:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            ti:Hide()
+            local bd = h:CreateTexture(nil, "OVERLAY")
+            bd:SetPoint("TOPLEFT",     h, "TOPLEFT",     -1,  1)
+            bd:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT",  1, -1)
+            bd:SetColorTexture(0, 0, 0, 0.9)
+            bd:SetDrawLayer("BACKGROUND")
+            bd:Hide()
+            h._testIcon, h._testBorder = ti, bd
             f._paHosts[i] = h
         end
         h:SetSize(size, size)
@@ -94,6 +122,16 @@ local function ensureHosts(f, db)
             h:SetPoint(opp, prev, side, sign * spacing, 0)
         end
         h:Show()
+        -- Test-mode fake icon visibility
+        if f._testMode and h._testIcon then
+            local iconId = TEST_PA_ICONS[((i - 1) % #TEST_PA_ICONS) + 1]
+            h._testIcon:SetTexture(iconId)
+            h._testIcon:Show()
+            h._testBorder:Show()
+        elseif h._testIcon then
+            h._testIcon:Hide()
+            h._testBorder:Hide()
+        end
     end
     -- Hide / shrink extra hosts beyond the requested count
     for i = count + 1, #f._paHosts do
@@ -141,14 +179,23 @@ end
 -- keeps rendering into the existing hosts even if they move.
 local function applyAnchors(f, db)
     if not canRegister() then return end
-    if not f or not f._unit then return end
+    if not f then return end
+    -- Allow test mode through (no _unit but _testMode is set) so the
+    -- fake icons render. For non-test mode without a unit, hide hosts.
+    if not f._unit and not f._testMode then
+        if f._paHosts then for _, h in ipairs(f._paHosts) do h:Hide() end end
+        return
+    end
     if db.showPrivateAuras == false then
         removeAnchors(f)
         if f._paHosts then for _, h in ipairs(f._paHosts) do h:Hide() end end
         return
     end
-    -- Always reposition the host frames — safe in combat.
+    -- Always reposition the host frames — safe in combat AND in test mode.
     ensureHosts(f, db)
+    -- Test mode: no real anchor registration (no unit). Hosts + fake
+    -- icons are enough for layout preview.
+    if f._testMode then return end
     if inCombat() then
         f._paPending = true
         return

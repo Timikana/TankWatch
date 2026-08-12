@@ -529,6 +529,25 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.14
+
+|cffffd700Mis à jour|r — Compatibilité Patch 12.1 (La Malédiction d'Ula'tek)
+- TOC passé en Interface 120100 — plus de flag "obsolète".
+- Audit complet contre les changements d'API 12.1 : aucune API
+  utilisée par TankWatch n'a été supprimée ou renommée. La règle
+  plus stricte de la 12.1 (les lectures d'auras par index/slot
+  lèvent maintenant une erreur Lua quand les auras sont secrètes)
+  est déjà couverte — toutes les lectures d'auras passent par
+  pcall depuis la 12.0, et les debuffs de boss secrets sont rendus
+  via le chemin des ancres d'auras privées.
+
+|cffffd700Amélioré|r — Le mode test prévisualise les slots d'auras privées
+- /tankw test N dessine des icônes fictives dans les slots d'auras
+  privées (bordure sombre, icônes école d'ombre) pour voir
+  exactement où les debuffs rendus par Blizzard atterriront dans
+  la rangée fusionnée. En vrai combat, Blizzard peint les
+  vraies auras à la place.
+
 ## v1.4.13
 
 |cffffd700Corrigé|r — Hosts d'auras privées superposés avec debuffs normaux en combat

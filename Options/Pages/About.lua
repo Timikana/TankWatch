@@ -9,6 +9,23 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.14
+
+|cffffd700Updated|r — Patch 12.1 (Curse of Ula'tek) compatibility
+- TOC bumped to Interface 120100 — no more "out of date" flag.
+- Full API audit against the 12.1 changes: none of the APIs
+  TankWatch uses were removed or renamed. The stricter 12.1 rule
+  (index/slot-based aura reads now hard-error while auras are
+  secret) is already covered — every aura read has been going
+  through pcall since 12.0, and secret boss debuffs render via
+  the private aura anchor path.
+
+|cffffd700Improved|r — Test mode now previews private aura slots
+- /tankw test N draws placeholder icons in the private aura host
+  slots (dark border, shadow-school icons) so you can see exactly
+  where Blizzard-rendered debuffs will land in the merged row.
+  Real combat replaces them with the actual aura paint.
+
 ## v1.4.13
 
 |cffffd700Fixed|r — Private aura hosts overlapping regular debuffs in combat

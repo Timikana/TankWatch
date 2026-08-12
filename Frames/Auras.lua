@@ -903,6 +903,7 @@ function TW.SetTestAuras(frame, tankIndex)
     TW.LayoutAuras(frame, db)
     local maxCount = math.min(db.aurasMaxCount or 5, #TEST_AURA_DATA)
     ensurePool(frame, db.aurasMaxCount or 5)
+    frame._visibleAuraCount = 0
     for i = 1, db.aurasMaxCount or 5 do
         local b = frame._auras[i]
         local data = TEST_AURA_DATA[i]
@@ -913,11 +914,14 @@ function TW.SetTestAuras(frame, tankIndex)
             b._testName = data[5] or data[6] or ("Debuff " .. i)
             b._unit, b._harmfulIndex = nil, nil
             b:Show()
+            frame._visibleAuraCount = i
         else
             stopTestLoop(b)
             b:Hide()
         end
     end
+    -- Trigger private aura test rendering inline with the test debuffs.
+    if TW.ApplyPrivateAuras then TW:ApplyPrivateAuras(frame) end
 end
 
 -- ============================================================
