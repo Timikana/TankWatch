@@ -9,6 +9,20 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.4.15
+
+|cffffd700Fixed|r — Lua error spam in combat since 12.1 (secret UNIT_AURA payload)
+- 12.1 delivers a fully secret UNIT_AURA payload while auras are
+  secret (combat / M+ / PvP). Testing updateInfo.isFullUpdate was
+  a hard Lua error under taint — up to 200+ errors per fight.
+  Every payload field is now read defensively (pcall + secret
+  check); unreadable deltas fall back to a full pcall-guarded
+  rescan, and secret boss debuffs keep rendering via the private
+  aura anchor path.
+- The event dispatcher also fed the aura cache for EVERY unit
+  emitting UNIT_AURA (nameplates, focus…). Only units bound to a
+  tank frame are processed now — less noise, no cache pollution.
+
 ## v1.4.14
 
 |cffffd700Updated|r — Patch 12.1 (Curse of Ula'tek) compatibility

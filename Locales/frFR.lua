@@ -529,6 +529,22 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.4.15
+
+|cffffd700Corrigé|r — Spam d'erreurs Lua en combat depuis la 12.1 (payload UNIT_AURA secret)
+- La 12.1 livre un payload UNIT_AURA entièrement secret quand les
+  auras sont secrètes (combat / M+ / JcJ). Tester
+  updateInfo.isFullUpdate était une erreur Lua sous taint —
+  jusqu'à 200+ erreurs par combat. Chaque champ du payload est
+  maintenant lu défensivement (pcall + check secret) ; les deltas
+  illisibles retombent sur un rescan complet pcall-é, et les
+  debuffs de boss secrets restent affichés via les ancres
+  d'auras privées.
+- Le dispatcher d'événements alimentait aussi le cache d'auras
+  pour TOUTES les unités émettant UNIT_AURA (nameplates, focus…).
+  Seules les unités liées à une frame de tank sont traitées
+  désormais — moins de bruit, pas de pollution du cache.
+
 ## v1.4.14
 
 |cffffd700Mis à jour|r — Compatibilité Patch 12.1 (La Malédiction d'Ula'tek)

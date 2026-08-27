@@ -131,13 +131,27 @@ end
 -- updateInfo is present, full rescan otherwise.
 function TW:HandleUnitAura(unit, updateInfo)
     if not unit then return end
-    if not updateInfo or updateInfo.isFullUpdate then
+    if not updateInfo then
+        rescanFull(unit)
+        return
+    end
+    -- 12.1: UNIT_AURA delivers a FULLY SECRET payload while auras are
+    -- secret (combat / encounters / M+ / PvP). A plain boolean test on
+    -- updateInfo.isFullUpdate is a hard Lua error under taint, and the
+    -- added/updated/removed tables come through as secret (not
+    -- iterable). Read every field defensively; when the delta is
+    -- unreadable, fall back to a full rescan — itself pcall-guarded,
+    -- so while auras are secret it degrades to an empty pass and the
+    -- private-aura anchor path keeps painting the boss debuffs.
+    local okFull, isFull = pcall(function() return updateInfo.isFullUpdate end)
+    if not okFull or isSecret(isFull) or isFull then
         rescanFull(unit)
         return
     end
     local entry = cacheEntry(unit)
-    if updateInfo.addedAuras then
-        for _, aura in ipairs(updateInfo.addedAuras) do
+    local okAdd, added = pcall(function() return updateInfo.addedAuras end)
+    if okAdd and added ~= nil and not isSecret(added) then
+        for _, aura in ipairs(added) do
             local instId
             pcall(function() instId = aura.auraInstanceID end)
             -- Accept any non-nil instId (secret-tagged included).
@@ -167,8 +181,9 @@ function TW:HandleUnitAura(unit, updateInfo)
             end
         end
     end
-    if updateInfo.updatedAuraInstanceIDs then
-        for _, id in ipairs(updateInfo.updatedAuraInstanceIDs) do
+    local okUpd, updated = pcall(function() return updateInfo.updatedAuraInstanceIDs end)
+    if okUpd and updated ~= nil and not isSecret(updated) then
+        for _, id in ipairs(updated) do
             if entry.byID[id] and C_UnitAuras
                and C_UnitAuras.GetAuraDataByAuraInstanceID then
                 local ok, fresh = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
@@ -176,8 +191,9 @@ function TW:HandleUnitAura(unit, updateInfo)
             end
         end
     end
-    if updateInfo.removedAuraInstanceIDs then
-        for _, id in ipairs(updateInfo.removedAuraInstanceIDs) do
+    local okRem, removed = pcall(function() return updateInfo.removedAuraInstanceIDs end)
+    if okRem and removed ~= nil and not isSecret(removed) then
+        for _, id in ipairs(removed) do
             cacheRemove(entry, id)
         end
     end

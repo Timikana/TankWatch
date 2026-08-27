@@ -1524,11 +1524,12 @@ ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
         or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
         -- Feed the aura cache the event payload BEFORE refreshing
         -- frames so the cache has up-to-date data when UpdateAuras
-        -- iterates it. The 2nd updateInfo arg is only present on
-        -- UNIT_AURA events; harmless for others (nil).
-        if event == "UNIT_AURA" and TW.HandleUnitAura then
-            TW:HandleUnitAura(unit, updateInfo)
-        end
+        -- iterates it — but ONLY for units bound to a tank frame.
+        -- UNIT_AURA also fires for nameplates / arena / focus units;
+        -- in 12.1 those carry fully secret payloads (212x Lua errors
+        -- observed on nameplate3) and they polluted the cache with
+        -- units we never render.
+        local auraFed = false
         for i = 1, MAX_TANKS do
             local f = TW.TankFrames[i]
             if f and f._unit then
@@ -1537,7 +1538,13 @@ ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
                     local ok, same = pcall(UnitIsUnit, f._unit, unit)
                     if ok and not isSecret(same) and same == true then match = true end
                 end
-                if match then UpdateFrame(f) end
+                if match then
+                    if event == "UNIT_AURA" and not auraFed and TW.HandleUnitAura then
+                        TW:HandleUnitAura(unit, updateInfo)
+                        auraFed = true
+                    end
+                    UpdateFrame(f)
+                end
             end
         end
     elseif event == "PLAYER_DEAD" or event == "PLAYER_UNGHOST" or event == "PLAYER_ALIVE" then
