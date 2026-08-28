@@ -667,6 +667,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
     elseif cmd == "resetauras" or cmd == "aurasreset" then
         if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+    elseif cmd == "acdebug" or cmd == "engine" then
+        if TW.AuraEngine and TW.AuraEngine.Debug then TW.AuraEngine.Debug() end
     elseif cmd == "renderdebug" or cmd == "rd" then
         TW._renderDebug = not TW._renderDebug
         print("|cff00ff96TankWatch:|r renderDebug = " .. tostring(TW._renderDebug))
@@ -684,6 +686,7 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
         print("  /tankw paauradump - " .. (L["dump private aura anchor state per tank"] or "dump private aura anchor state per tank"))
+        print("  /tankw acdebug    - " .. (L["dump 12.1 aura engine state per tank"] or "dump 12.1 aura engine state per tank"))
         print("  /tankw resetauras - " .. (L["reset only the aura settings to defaults"] or "reset only the aura settings to defaults"))
         print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end

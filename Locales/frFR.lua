@@ -225,6 +225,7 @@ L["Direction private aura icons stack horizontally from the anchor."] = "Directi
 L["Horizontal offset of the private aura row."] = "Décalage horizontal de la rangée d'auras privées."
 L["Vertical offset of the private aura row."] = "Décalage vertical de la rangée d'auras privées."
 L["dump private aura anchor state per tank"] = "afficher l'état d'enregistrement des ancrages d'auras privées par tank"
+L["dump 12.1 aura engine state per tank"] = "afficher l'état du moteur d'auras 12.1 par tank"
 L["reset only the aura settings to defaults"] = "réinitialiser uniquement les paramètres d'auras"
 L["Reset aura settings"] = "Réinitialiser les auras"
 L["Reset only the aura-related settings (size, position, filter, blacklist seed, private auras, etc.) back to defaults. Other settings stay untouched."] =
@@ -529,6 +530,27 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.5.0-beta1
+
+|cffffd700Refonte|r — Les debuffs passent par le moteur d'auras 12.1
+- La 12.1 a scellé complètement la lecture des auras en combat : le
+  pipeline de scan Lua pouvait ne RIEN afficher pendant un combat
+  (régression v1.4.15). La rangée de debuffs est maintenant un
+  AuraContainer — l'addon déclare la requête (HARMFUL, whitelist/
+  blacklist en filtres include/exclude côté moteur, tri par
+  expiration) et fournit les régions (icône, swipe, gros timer,
+  compteur de stacks) ; le code sécurisé de Blizzard les remplit et
+  les anime en combat, secrets compris. Même architecture que
+  DandersFrames 5.x et BigWigs en 12.1.
+- Whitelist / blacklist / nombre max / taille / espacement / ancrage /
+  sens / décalages / positions des textes s'appliquent toujours.
+- « Seulement les debuffs avec stacks » n'est pas exprimable côté
+  moteur et est ignoré dans ce mode (le chemin legacy/Classic le
+  respecte toujours).
+- Les slots d'auras privées s'enchaînent après la zone réservée de la
+  rangée (le moteur cache combien d'icônes sont visibles).
+- /tankw acdebug affiche l'état du moteur par frame de tank.
+
 ## v1.4.15
 
 |cffffd700Corrigé|r — Spam d'erreurs Lua en combat depuis la 12.1 (payload UNIT_AURA secret)

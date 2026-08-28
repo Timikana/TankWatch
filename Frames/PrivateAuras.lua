@@ -58,7 +58,13 @@ local function ensureHosts(f, db)
     -- the user-configured anchor. Creates the illusion of a single
     -- continuous row mixing normal + private auras.
     local lastVisible
-    if f._auras and f._visibleAuraCount and f._visibleAuraCount > 0 then
+    if f._acActive and f._ac and not f._testMode then
+        -- 12.1 engine mode: the visible-button count is unreadable
+        -- (secret), so chain the hosts after the container's reserved
+        -- row box instead. Leaves a gap when the row isn't full — known
+        -- trade-off, revisit if the container turns out to auto-size.
+        lastVisible = f._ac
+    elseif f._auras and f._visibleAuraCount and f._visibleAuraCount > 0 then
         lastVisible = f._auras[f._visibleAuraCount]
     end
 

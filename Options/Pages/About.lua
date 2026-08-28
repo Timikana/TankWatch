@@ -9,6 +9,25 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.5.0-beta1
+
+|cffffd700Rework|r — Debuffs now render through the 12.1 aura engine
+- 12.1 sealed aura reads in combat entirely: the Lua scan pipeline
+  could show NOTHING during a fight (v1.4.15 regression). The debuff
+  row is now an AuraContainer — the addon declares the query
+  (HARMFUL, whitelist/blacklist as engine-side include/exclude spell
+  ID filters, sorted by expiration) and provides the regions (icon,
+  swipe, big timer, stack count); Blizzard's secure code fills and
+  drives them in combat, secrets included. Same architecture as
+  DandersFrames 5.x and BigWigs on 12.1.
+- Whitelist / blacklist / max icons / size / spacing / anchor /
+  grow / offsets / stack & timer text positions all still apply.
+- "Only debuffs with stacks" can't be expressed engine-side and is
+  ignored in this mode (legacy/Classic path still honors it).
+- Private aura slots now chain after the debuff row's reserved box
+  (the engine hides how many icons are visible).
+- /tankw acdebug dumps the engine state per tank frame.
+
 ## v1.4.15
 
 |cffffd700Fixed|r — Lua error spam in combat since 12.1 (secret UNIT_AURA payload)
