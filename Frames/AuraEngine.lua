@@ -191,6 +191,17 @@ local function initButton(f, btn)
         pcall(btn.SetApplicationCount, btn, stacks)
     end
 
+    -- Register the texts so TW:ApplyFonts (font face / timer & stack
+    -- size sliders) reaches them, and apply the current spec right away
+    -- — buttons can spawn mid-combat and must not wait for a refresh.
+    f._acTexts = f._acTexts or {}
+    f._acTexts[#f._acTexts + 1] = { timer = timer, stacks = stacks }
+    if TW.GetAuraFontSpec then
+        local file, timerSz, stackSz, strongOutline = TW:GetAuraFontSpec()
+        pcall(timer.SetFont, timer, file, timerSz, strongOutline)
+        pcall(stacks.SetFont, stacks, file, stackSz, strongOutline)
+    end
+
     -- Native tooltip on hover; clicks pass through to the world.
     if btn.SetMouseClickEnabled then pcall(btn.SetMouseClickEnabled, btn, false) end
     if btn.SetMouseMotionEnabled then pcall(btn.SetMouseMotionEnabled, btn, true) end
