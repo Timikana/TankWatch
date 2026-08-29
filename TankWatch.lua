@@ -604,6 +604,23 @@ function TW:ResolveFont(name)
     return fallback
 end
 
+-- Shared font spec for the aura texts (legacy buttons AND the 12.1
+-- engine buttons' addon-owned FontStrings). Timer is the prominent
+-- display (~1.6x), stack count secondary (~0.9x); the auraTimerSize /
+-- auraStackSize sliders override when > 0.
+function TW:GetAuraFontSpec()
+    local db = TW:GetDB()
+    local file = TW:ResolveFont(db.fontFace)
+    local size = db.fontSize or 12
+    local outline = db.fontOutline or "NONE"
+    local strongOutline = (outline == "THICKOUTLINE") and "THICKOUTLINE" or "OUTLINE"
+    local timerSz = (db.auraTimerSize and db.auraTimerSize > 0)
+        and db.auraTimerSize or math.floor(size * 1.6 + 0.5)
+    local stackSz = (db.auraStackSize and db.auraStackSize > 0)
+        and db.auraStackSize or math.max(9, math.floor(size * 0.9 + 0.5))
+    return file, timerSz, stackSz, strongOutline
+end
+
 function TW:ApplyFonts()
     if not TW.TankFrames then return end
     local db = TW:GetDB()
@@ -614,21 +631,24 @@ function TW:ApplyFonts()
     local function setF(fs, sz, ol)
         if fs then pcall(fs.SetFont, fs, file, sz, ol) end
     end
+    local _, timerSz, stackSz, strongOutline = TW:GetAuraFontSpec()
     for i = 1, TW.MAX_TANKS do
         local f = TW.TankFrames[i]
         if f then
             setF(f.nameText,   size, outline)
             setF(f.healthText, size, outline)
             if f._auras then
-                local strongOutline = (outline == "THICKOUTLINE") and "THICKOUTLINE" or "OUTLINE"
-                -- Timer is the prominent display (~1.6x), stack count secondary (~0.9x)
-                local timerSz = (db.auraTimerSize and db.auraTimerSize > 0)
-                    and db.auraTimerSize or math.floor(size * 1.6 + 0.5)
-                local stackSz = (db.auraStackSize and db.auraStackSize > 0)
-                    and db.auraStackSize or math.max(9, math.floor(size * 0.9 + 0.5))
                 for _, a in ipairs(f._auras) do
                     setF(a.stacks, stackSz, strongOutline)
                     setF(a.timer,  timerSz, strongOutline)
+                end
+            end
+            -- 12.1 engine buttons: SetFont on our own FontStrings is
+            -- unprotected, so this works even mid-combat.
+            if f._acTexts then
+                for _, t in ipairs(f._acTexts) do
+                    setF(t.stacks, stackSz, strongOutline)
+                    setF(t.timer,  timerSz, strongOutline)
                 end
             end
         end
@@ -667,6 +687,8 @@ SlashCmdList["TANKWATCH"] = function(msg)
         if TW.PrintPrivateAuraDebug then TW:PrintPrivateAuraDebug() end
     elseif cmd == "resetauras" or cmd == "aurasreset" then
         if TW.ResetAuraSettings then TW:ResetAuraSettings() end
+    elseif cmd == "acdebug" or cmd == "engine" then
+        if TW.AuraEngine and TW.AuraEngine.Debug then TW.AuraEngine.Debug() end
     elseif cmd == "renderdebug" or cmd == "rd" then
         TW._renderDebug = not TW._renderDebug
         print("|cff00ff96TankWatch:|r renderDebug = " .. tostring(TW._renderDebug))
@@ -684,6 +706,7 @@ SlashCmdList["TANKWATCH"] = function(msg)
         print("  /tankw debug      - " .. L["print roster role/maintank info"])
         print("  /tankw auradebug  - " .. L["print every HARMFUL aura on each tank unit"])
         print("  /tankw paauradump - " .. (L["dump private aura anchor state per tank"] or "dump private aura anchor state per tank"))
+        print("  /tankw acdebug    - " .. (L["dump 12.1 aura engine state per tank"] or "dump 12.1 aura engine state per tank"))
         print("  /tankw resetauras - " .. (L["reset only the aura settings to defaults"] or "reset only the aura settings to defaults"))
         print("  /tankw bugreport  - " .. (L["copy system + addon state for bug reports"] or "copy system + addon state for bug reports"))
     end

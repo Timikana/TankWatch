@@ -735,7 +735,16 @@ local function ApplyLayout()
             f.powerText:SetJustifyH(justifyOf(a))
         end
 
-        if TW.LayoutAuras then TW.LayoutAuras(f, db) end
+        -- 12.1+: the AuraEngine (AuraContainer path) owns aura rendering
+        -- when supported — park the legacy Lua-painted buttons. Test mode
+        -- and pre-12.1 clients fall back to the legacy path.
+        local engineOwns = TW.AuraEngine and TW.AuraEngine.Apply
+                           and TW.AuraEngine.Apply(f, db)
+        if engineOwns then
+            if f._auras then for _, a in ipairs(f._auras) do a:Hide() end end
+        elseif TW.LayoutAuras then
+            TW.LayoutAuras(f, db)
+        end
         if f._unit or f._testMode then updateRaidTargetIcon(f) end
     end
 end
@@ -1047,7 +1056,9 @@ local function UpdateFrame(f)
     end
     applyBackgroundFill(f, db, unit, nil)
 
-    if TW.UpdateAuras then TW.UpdateAuras(f) end
+    -- Legacy render only — the 12.1 AuraEngine container self-updates
+    -- from the secure side, nothing to do per-event.
+    if not f._acActive and TW.UpdateAuras then TW.UpdateAuras(f) end
 end
 
 local function RefreshAll()
@@ -1539,7 +1550,10 @@ ev:SetScript("OnEvent", function(self, event, unit, updateInfo)
                     if ok and not isSecret(same) and same == true then match = true end
                 end
                 if match then
-                    if event == "UNIT_AURA" and not auraFed and TW.HandleUnitAura then
+                    -- The aura cache only feeds the LEGACY render path;
+                    -- engine-active frames are driven by Blizzard.
+                    if event == "UNIT_AURA" and not auraFed
+                       and TW.HandleUnitAura and not f._acActive then
                         TW:HandleUnitAura(unit, updateInfo)
                         auraFed = true
                     end
