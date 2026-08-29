@@ -137,6 +137,79 @@ local function styleButton(f, btn, db)
     if TW.ApplyAuraTextLayout then pcall(TW.ApplyAuraTextLayout, btn, db) end
 end
 
+-- ============================================================
+-- DURATION TEXT FORMAT
+-- ------------------------------------------------------------
+-- Blizzard's default duration text is "3 s" (localized unit suffix) —
+-- not our look. A NumericRuleFormatter reproduces the legacy compact
+-- format ("45" → "2m" → "1h", bare number under a minute) and is
+-- evaluated C-SIDE against the secret remaining time, so it's fully
+-- combat-safe (unlike SetApplicationCount, duration formatters are
+-- explicitly supported — they ride the DurationTextBinding).
+-- Breakpoints are DF's field-tested NUMBER recipe: the seconds band
+-- CEILS (countdown reads 3, 2, 1, gone — floor made the last "1"
+-- linger two seconds), promotion to m/h at Blizzard's 1.5x thresholds,
+-- quotient rounds up to match the game's own frames.
+-- ============================================================
+local PROMOTE_MIN  = 1 + 1.5 * 60    -- 91s  → "2m"
+local PROMOTE_HOUR = 1 + 1.5 * 3600  -- 5401s → "2h"
+
+local durFormatter -- nil = not built yet, false = unavailable
+local function getDurationFormatter()
+    if durFormatter ~= nil then return durFormatter or nil end
+    if not (C_StringUtil and C_StringUtil.CreateNumericRuleFormatter
+            and Enum and Enum.NumericRuleFormatRounding) then
+        durFormatter = false
+        return nil
+    end
+    local ok, f = pcall(function()
+        local down = Enum.NumericRuleFormatRounding.Down
+        local up   = Enum.NumericRuleFormatRounding.Up
+        local fmt = C_StringUtil.CreateNumericRuleFormatter()
+        fmt:AddBreakpoint({ threshold = 0, step = 1, rounding = up, min = 1,
+                            format = "%d" })
+        fmt:AddBreakpoint({ threshold = PROMOTE_MIN, step = 1, rounding = down, min = 1,
+                            format = "%dm", components = { { div = 60, rounding = up } } })
+        fmt:AddBreakpoint({ threshold = PROMOTE_HOUR, step = 1, rounding = down, min = 1,
+                            format = "%dh", components = { { div = 3600, rounding = up } } })
+        return fmt
+    end)
+    durFormatter = ok and f or false
+    return durFormatter or nil
+end
+
+-- SetDurationText options: build 68914 reshaped them to { binding | ... }
+-- (flat keys silently ignored); older builds read the flat { formatter }.
+-- The honest probe for the new shape is the options processor itself.
+-- One template binding serves every button (Assign copies it wholesale).
+local durBinding -- nil = not built yet, false = unavailable
+local function getDurationTextOpts()
+    local fmt = getDurationFormatter()
+    if not fmt then return nil end
+    if C_AuraContainerUtil
+       and type(C_AuraContainerUtil.ProcessCustomAuraButtonDurationTextOptions) == "function" then
+        if durBinding == nil then
+            if C_DurationUtil and C_DurationUtil.CreateDurationTextBinding then
+                local ok, b = pcall(function()
+                    local bind = C_DurationUtil.CreateDurationTextBinding()
+                    -- A fresh binding is UNCONFIGURED and Assign replaces the
+                    -- button binding wholesale — it must carry the formatter
+                    -- itself and be enabled, or rows render no text at all.
+                    bind:SetFormatter(fmt)
+                    bind:SetEnabled(true)
+                    return bind
+                end)
+                durBinding = (ok and b) or false
+            else
+                durBinding = false
+            end
+        end
+        if durBinding then return { binding = durBinding } end
+        return nil
+    end
+    return { formatter = fmt }
+end
+
 -- The flow layout sizes its cells from the GROUP layout table, not from
 -- the button's own SetSize — without this the engine re-stamps its
 -- default cell size (32px) on every parse and the size slider "does
@@ -193,10 +266,13 @@ local function initButton(f, btn)
     timer:SetDrawLayer("OVERLAY", 7)
     btn.timer = timer
     if btn.SetDurationText then
-        -- Signature reshaped across 12.1 builds (68914 added an options
-        -- arg) — try bare, fall back to empty options.
-        if not pcall(btn.SetDurationText, btn, timer) then
-            pcall(btn.SetDurationText, btn, timer, {})
+        -- Custom compact format ("45" → "2m" → "1h") when the formatter
+        -- API is available; otherwise Blizzard's default text ("3 s").
+        local opts = getDurationTextOpts()
+        if not (opts and pcall(btn.SetDurationText, btn, timer, opts)) then
+            if not pcall(btn.SetDurationText, btn, timer) then
+                pcall(btn.SetDurationText, btn, timer, {})
+            end
         end
     end
 

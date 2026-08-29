@@ -9,6 +9,16 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
+## v1.5.1
+
+|cffffd700Fixed|r — Compact duration text ("3" instead of "3 s")
+- The engine's default duration text carries a localized unit suffix.
+  A C-side rule formatter restores the compact look: bare ceil'd
+  seconds up to 91s, then "Xm" / "Xh". Combat-safe (evaluated against
+  the secret remaining time by Blizzard's code).
+- The test-mode preview timer now uses the exact same breakpoints, so
+  /tankw test shows precisely what renders live.
+
 ## v1.5.0
 
 |cffffd700Rework|r — Debuffs now render through the 12.1 aura engine
