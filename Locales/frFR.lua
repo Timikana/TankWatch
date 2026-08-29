@@ -530,6 +530,16 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
+## v1.5.1
+
+|cffffd700Corrigé|r — Texte de durée compact (« 3 » au lieu de « 3 s »)
+- Le texte de durée par défaut du moteur porte un suffixe d'unité
+  localisé. Un formatter C restaure le format compact : secondes
+  nues (arrondi sup.) jusqu'à 91s, puis « Xm » / « Xh ». Combat-safe
+  (évalué par le code Blizzard contre le temps restant secret).
+- Le timer de la préviz test utilise exactement les mêmes paliers :
+  /tankw test montre précisément ce qui s'affichera en vrai.
+
 ## v1.5.0
 
 |cffffd700Refonte|r — Les debuffs passent par le moteur d'auras 12.1
