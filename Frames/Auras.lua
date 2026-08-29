@@ -411,12 +411,16 @@ local function ensurePool(frame, count)
     end
 end
 
+-- Mirrors the engine's NUMBER formatter (AuraEngine.lua) exactly, so the
+-- test-mode preview shows what the live 12.1 render will: ceil'd bare
+-- seconds up to 91s (countdown reads 3, 2, 1, gone), then "Xm" with the
+-- quotient rounded up (2m32s → "3m", matching Blizzard's own frames),
+-- then "Xh" past 5401s.
 local function formatTime(s)
     if s <= 0 then return "" end
-    if s < 10 then return format("%.1f", s) end
-    if s < 60 then return format("%d", s) end
-    if s < 3600 then return format("%dm", math.floor(s / 60)) end
-    return format("%dh", math.floor(s / 3600))
+    if s < 91 then return format("%d", math.ceil(s)) end
+    if s < 5401 then return format("%dm", math.ceil(s / 60)) end
+    return format("%dh", math.ceil(s / 3600))
 end
 
 -- ============================================================
