@@ -219,21 +219,36 @@ local function applyGeometry(f, c, db)
     local spacing  = db.aurasSpacing or 2
     local maxCount = db.aurasMaxCount or 5
     local w = maxCount * size + math.max(0, maxCount - 1) * spacing
-    c:SetSize(math.max(w, size), size)
+
+    -- The container inherits forbidden aspects (UntrustedLayoutScript-
+    -- Execution): NOTHING of ours may anchor TO it — SetPoint on a
+    -- dependent frame errors. Since we own the row geometry anyway, it
+    -- lives on a plain invisible shadow box; the container fills the
+    -- box (protected-depends-on-unprotected is the allowed direction),
+    -- and anything chaining after the row (private aura hosts) anchors
+    -- to the shadow, never to the container.
+    local box = f._acShadow
+    if not box then
+        box = CreateFrame("Frame", nil, f)
+        f._acShadow = box
+    end
+    box:SetSize(math.max(w, size), size)
 
     local anchor = db.aurasAnchor or "RIGHT"
     local growX  = db.aurasGrowX or "RIGHT"
     local compact = db.compactMode and true or false
     if compact then growX = "RIGHT" end
 
-    c:ClearAllPoints()
+    box:ClearAllPoints()
     if compact and db.showClassIcon and f.classIcon and f.classIcon:IsShown() then
-        c:SetPoint("LEFT", f.classIcon, "RIGHT", 4, 0)
+        box:SetPoint("LEFT", f.classIcon, "RIGHT", 4, 0)
     elseif compact then
-        c:SetPoint("LEFT", f, "LEFT", 2, 0)
+        box:SetPoint("LEFT", f, "LEFT", 2, 0)
     else
-        c:SetPoint(mirrorAnchor(anchor), f, anchor, db.aurasX or 0, db.aurasY or 0)
+        box:SetPoint(mirrorAnchor(anchor), f, anchor, db.aurasX or 0, db.aurasY or 0)
     end
+    pcall(c.ClearAllPoints, c)
+    pcall(c.SetAllPoints, c, box)
 
     -- Flow layout — every setter pcall'd + feature-checked so a PTR
     -- rename degrades to Blizzard's default flow instead of erroring.
