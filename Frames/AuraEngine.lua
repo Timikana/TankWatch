@@ -129,9 +129,32 @@ end
 -- contents; we only own look & placement.
 -- ============================================================
 local function styleButton(f, btn, db)
+    -- Engine-owned buttons can turn forbidden under us at any moment
+    -- (the client can reclaim/re-init a slot's subtree) — every touch
+    -- is pcall'd so a throw costs one icon, not the whole pass.
     local size = db.aurasSize or 28
     pcall(btn.SetSize, btn, size, size)
-    if TW.ApplyAuraTextLayout then TW.ApplyAuraTextLayout(btn, db) end
+    if TW.ApplyAuraTextLayout then pcall(TW.ApplyAuraTextLayout, btn, db) end
+end
+
+-- The flow layout sizes its cells from the GROUP layout table, not from
+-- the button's own SetSize — without this the engine re-stamps its
+-- default cell size (32px) on every parse and the size slider "does
+-- nothing". Field names changed at build 68914; ship both generations
+-- (unknown keys are ignored).
+local function buildGroupLayout(db)
+    local size    = db.aurasSize or 28
+    local spacing = db.aurasSpacing or 2
+    return {
+        elementWidth    = size,
+        elementHeight   = size,
+        elementSpacing  = spacing, -- 68914+
+        lineSpacing     = spacing, -- 68914+
+        groupSpacing    = 0,       -- 68914+
+        elementSpacingX = spacing, -- pre-68914 twin
+        elementSpacingY = spacing, -- pre-68914 twin
+        gapX            = 0,       -- pre-68914 twin
+    }
 end
 
 local function initButton(f, btn)
@@ -355,6 +378,7 @@ function AE.Apply(f, db)
             sortMethod       = 4, -- Enum.UnitAuraSortRule.ExpirationOnly
             sortDirection    = 0, -- Enum.UnitAuraSortDirection.Normal
             candidateFilters = cf,
+            layout           = buildGroupLayout(db),
         })
         if not okG then
             pcall(c.Hide, c)
@@ -368,6 +392,11 @@ function AE.Apply(f, db)
         end
         if c.SetAuraGroupCandidateFilters then
             pcall(c.SetAuraGroupCandidateFilters, c, "main", cf)
+        end
+        -- Re-push the cell layout — button SetSize alone is stomped by
+        -- the flow on the next parse (see buildGroupLayout).
+        if c.SetAuraGroupLayout then
+            pcall(c.SetAuraGroupLayout, c, "main", buildGroupLayout(db))
         end
     end
 
