@@ -530,7 +530,7 @@ L["Changelog"] = "Nouveautés"
 L["Full GitHub history: https://github.com/Timikana/TankWatch/releases"] =
     "Historique complet sur GitHub : https://github.com/Timikana/TankWatch/releases"
 L["CHANGELOG_BODY"] = [[
-## v1.5.0-beta1
+## v1.5.0
 
 |cffffd700Refonte|r — Les debuffs passent par le moteur d'auras 12.1
 - La 12.1 a scellé complètement la lecture des auras en combat : le

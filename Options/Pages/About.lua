@@ -9,7 +9,7 @@ local _registerInSection  = h.registerInSection
 TW.OptPages = TW.OptPages or {}
 
 local CHANGELOG_TEXT = L["CHANGELOG_BODY"] or [[
-## v1.5.0-beta1
+## v1.5.0
 
 |cffffd700Rework|r — Debuffs now render through the 12.1 aura engine
 - 12.1 sealed aura reads in combat entirely: the Lua scan pipeline
